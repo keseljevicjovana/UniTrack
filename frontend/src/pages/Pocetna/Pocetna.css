@@ -1,0 +1,40 @@
+.pocetna {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* Greeting */
+.pocetna__greeting-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.4px;
+  margin: 0;
+}
+
+/* Status section */
+.pocetna__section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+  letter-spacing: 0.1px;
+}
+
+/* 2x2 grid */
+.pocetna__cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .pocetna__cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pocetna__greeting-title {
+    font-size: 22px;
+  }
+}
