@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* DEFINICIJA BOJA ZA TAILWIND v4 */
+@theme {
+  --color-uni-brown: #705C4E; 
+  --color-uni-beige: #F5F2ED;
+  --color-uni-gold: #BEB7AD;
+}
+
+/* DEFINICIJA BOJA ZA DAISYUI KOMPONENTE */
+@plugin "daisyui" {
+  themes: unitrack --default;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-primary: var(--color-uni-brown);
+  --color-primary-content: var(--color-uni-beige);
+  --color-base-100: var(--color-uni-beige);
+  --color-base-content: #45372E;
+}
