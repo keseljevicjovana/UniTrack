@@ -9,6 +9,7 @@ const app = express();
 const authRoutes = require("./routes/auth");
 const resetRoutes = require("./routes/reset");
 const adminRoutes = require("./routes/admin");
+const studentRoutes = require("./routes/student");
 
 app.use(
   cors({
@@ -35,11 +36,12 @@ app.use(
 app.use("/api/auth", authRoutes);
 app.use("/api/reset", resetRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/student", studentRoutes);
 
 app.get("/", (req, res) => {
-  res.json({ message: "Backend radi" });
+  res.json({ message: "Backend" });
 });
 
 app.listen(8080, () => {
-  console.log("Server sluša na 8080");
+  console.log("Server on 8080");
 });

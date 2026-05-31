@@ -131,19 +131,16 @@ router.post("/login", async (req, res) => {
       req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
     }
 
-    let redirectTo = "/";
+    const redirectMap = {
+      admin: "/admin/dashboard",
+      firma: "/firma/dashboard",
+      studentska_sluzba: "/sluzba/dashboard",
+      student: "/student/dashboard",
+    };
 
-    if (user.role === "admin") {
-      redirectTo = "/admin/dashboard";
-    } else if (user.role === "firma") {
-      redirectTo = "/firma/dashboard";
-    } else if (user.role === "studentska_sluzba") {
-      redirectTo = "/sluzba/dashboard";
-    } else if (user.role === "student") {
-      redirectTo = "/student/dashboard";
-    }
+    const redirectTo = redirectMap[user.role] || "/";
 
-    res.json({
+    return res.json({
       success: true,
       message: "Uspješna prijava",
       redirectTo,
@@ -156,11 +153,22 @@ router.post("/login", async (req, res) => {
   } catch (error) {
     console.log(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Greška pri povezivanju sa bazom",
     });
   }
+});
+
+router.post("/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie("connect.sid");
+
+    return res.json({
+      success: true,
+      message: "Uspješno ste se odjavili",
+    });
+  });
 });
 
 module.exports = router;
