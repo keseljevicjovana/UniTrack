@@ -10,6 +10,7 @@ const authRoutes = require("./routes/auth");
 const resetRoutes = require("./routes/reset");
 const adminRoutes = require("./routes/admin");
 const studentRoutes = require("./routes/student");
+const firmaRoutes = require("./routes/firma");
 
 app.use(
   cors({
@@ -37,6 +38,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/reset", resetRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/student", studentRoutes);
+app.use("/api/firma", firmaRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Backend" });

@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
 
+/* ---------------- LOGIN ---------------- */
 router.post("/login", async (req, res) => {
   const { identifier, password, rememberMe } = req.body;
 
@@ -16,6 +17,7 @@ router.post("/login", async (req, res) => {
 
     let user = null;
 
+    // ---------------- ADMIN ----------------
     const [adminRows] = await db.query(
       `SELECT id, ime, prezime, email, lozinka
        FROM admini
@@ -31,12 +33,11 @@ router.post("/login", async (req, res) => {
         id: admin.id,
         role: "admin",
         email: admin.email,
-        ime: admin.ime,
-        prezime: admin.prezime,
-        lozinka: admin.lozinka,
+        password: admin.lozinka,
       };
     }
 
+    // ---------------- FIRMA ----------------
     if (!user) {
       const [firmaRows] = await db.query(
         `SELECT id, naziv_firme, email, lozinka
@@ -53,12 +54,12 @@ router.post("/login", async (req, res) => {
           id: firma.id,
           role: "firma",
           email: firma.email,
-          naziv_firme: firma.naziv_firme,
-          lozinka: firma.lozinka,
+          password: firma.lozinka,
         };
       }
     }
 
+    // ---------------- STUDENTSKA SLUŽBA ----------------
     if (!user) {
       const [sluzbaRows] = await db.query(
         `SELECT id, naziv_fakulteta, email, lozinka
@@ -75,12 +76,12 @@ router.post("/login", async (req, res) => {
           id: sluzba.id,
           role: "studentska_sluzba",
           email: sluzba.email,
-          naziv_fakulteta: sluzba.naziv_fakulteta,
-          lozinka: sluzba.lozinka,
+          password: sluzba.lozinka,
         };
       }
     }
 
+    // ---------------- STUDENT ----------------
     if (!user) {
       const [studentRows] = await db.query(
         `SELECT id, ime, prezime, studentski_email, jedinstveni_id, lozinka
@@ -97,10 +98,7 @@ router.post("/login", async (req, res) => {
           id: student.id,
           role: "student",
           email: student.studentski_email,
-          ime: student.ime,
-          prezime: student.prezime,
-          jedinstveni_id: student.jedinstveni_id,
-          lozinka: student.lozinka,
+          password: student.lozinka,
         };
       }
     }
@@ -112,7 +110,8 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const passwordCorrect = await bcrypt.compare(password, user.lozinka);
+    // ---------------- PASSWORD CHECK ----------------
+    const passwordCorrect = await bcrypt.compare(password, user.password);
 
     if (!passwordCorrect) {
       return res.status(401).json({
@@ -121,14 +120,17 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // ---------------- SESSION (OLD STYLE) ----------------
     req.session.user = {
       id: user.id,
       role: user.role,
-      email: user.email,
+      email: user.email
     };
 
     if (rememberMe) {
       req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+    } else {
+      req.session.cookie.maxAge = 1000 * 60 * 60 * 2;
     }
 
     const redirectMap = {
@@ -138,12 +140,10 @@ router.post("/login", async (req, res) => {
       student: "/student/dashboard",
     };
 
-    const redirectTo = redirectMap[user.role] || "/";
-
     return res.json({
       success: true,
       message: "Uspješna prijava",
-      redirectTo,
+      redirectTo: redirectMap[user.role],
       user: {
         id: user.id,
         role: user.role,
@@ -152,7 +152,6 @@ router.post("/login", async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-
     return res.status(500).json({
       success: false,
       message: "Greška pri povezivanju sa bazom",
@@ -160,6 +159,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
+/* ---------------- LOGOUT ---------------- */
 router.post("/logout", (req, res) => {
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
@@ -169,6 +169,65 @@ router.post("/logout", (req, res) => {
       message: "Uspješno ste se odjavili",
     });
   });
+});
+
+/* ---------------- ME (OLD STYLE FIXED) ---------------- */
+router.get("/me", async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({
+      success: false,
+      message: "Niste prijavljeni",
+    });
+  }
+
+  const role = req.session.role;
+
+  try {
+    let user = null;
+
+    if (role === "admin") {
+      const [rows] = await db.query(
+        "SELECT id, ime, prezime, email FROM admini WHERE id = ?",
+        [req.session.userId]
+      );
+      user = rows[0];
+    }
+
+    if (role === "firma") {
+      const [rows] = await db.query(
+        "SELECT id, naziv_firme, email FROM firme WHERE id = ?",
+        [req.session.userId]
+      );
+      user = rows[0];
+    }
+
+    if (role === "studentska_sluzba") {
+      const [rows] = await db.query(
+        "SELECT id, naziv_fakulteta, email FROM studentske_sluzbe WHERE id = ?",
+        [req.session.userId]
+      );
+      user = rows[0];
+    }
+
+    if (role === "student") {
+      const [rows] = await db.query(
+        "SELECT id, ime, prezime, studentski_email FROM studenti WHERE id = ?",
+        [req.session.userId]
+      );
+      user = rows[0];
+    }
+
+    return res.json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Greška na serveru",
+    });
+  }
 });
 
 module.exports = router;
