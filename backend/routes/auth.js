@@ -17,12 +17,14 @@ router.post("/login", async (req, res) => {
 
     let user = null;
 
-    // ---------------- ADMIN ----------------
+    /* ---------------- ADMIN ---------------- */
     const [adminRows] = await db.query(
-      `SELECT id, ime, prezime, email, lozinka
-       FROM admini
-       WHERE email = ?
-       LIMIT 1`,
+      `
+      SELECT id, ime, prezime, email, lozinka
+      FROM admini
+      WHERE email = ?
+      LIMIT 1
+      `,
       [identifier]
     );
 
@@ -37,13 +39,15 @@ router.post("/login", async (req, res) => {
       };
     }
 
-    // ---------------- FIRMA ----------------
+    /* ---------------- FIRMA ---------------- */
     if (!user) {
       const [firmaRows] = await db.query(
-        `SELECT id, naziv_firme, email, lozinka
-         FROM firme
-         WHERE email = ?
-         LIMIT 1`,
+        `
+        SELECT id, naziv_firme, email, lozinka
+        FROM firme
+        WHERE email = ?
+        LIMIT 1
+        `,
         [identifier]
       );
 
@@ -59,13 +63,15 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    // ---------------- STUDENTSKA SLUŽBA ----------------
+    /* ---------------- STUDENTSKA SLUZBA ---------------- */
     if (!user) {
       const [sluzbaRows] = await db.query(
-        `SELECT id, naziv_fakulteta, email, lozinka
-         FROM studentske_sluzbe
-         WHERE email = ?
-         LIMIT 1`,
+        `
+        SELECT id, naziv_fakulteta, email, lozinka
+        FROM studentske_sluzbe
+        WHERE email = ?
+        LIMIT 1
+        `,
         [identifier]
       );
 
@@ -81,13 +87,17 @@ router.post("/login", async (req, res) => {
       }
     }
 
-    // ---------------- STUDENT ----------------
+    /* ---------------- STUDENT ---------------- */
     if (!user) {
       const [studentRows] = await db.query(
-        `SELECT id, ime, prezime, studentski_email, jedinstveni_id, lozinka
-         FROM studenti
-         WHERE studentski_email = ? OR jedinstveni_id = ?
-         LIMIT 1`,
+        `
+        SELECT id, ime, prezime, studentski_email,
+               jedinstveni_id, lozinka
+        FROM studenti
+        WHERE studentski_email = ?
+           OR jedinstveni_id = ?
+        LIMIT 1
+        `,
         [identifier, identifier]
       );
 
@@ -110,8 +120,11 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // ---------------- PASSWORD CHECK ----------------
-    const passwordCorrect = await bcrypt.compare(password, user.password);
+    /* ---------------- PROVJERA LOZINKE ---------------- */
+    const passwordCorrect = await bcrypt.compare(
+      password,
+      user.password
+    );
 
     if (!passwordCorrect) {
       return res.status(401).json({
@@ -120,17 +133,19 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // ---------------- SESSION (OLD STYLE) ----------------
+    /* ---------------- SESSION ---------------- */
     req.session.user = {
       id: user.id,
       role: user.role,
-      email: user.email
+      email: user.email,
     };
 
     if (rememberMe) {
-      req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+      req.session.cookie.maxAge =
+        1000 * 60 * 60 * 24 * 30; // 30 dana
     } else {
-      req.session.cookie.maxAge = 1000 * 60 * 60 * 2;
+      req.session.cookie.maxAge =
+        1000 * 60 * 60 * 2; // 2 sata
     }
 
     const redirectMap = {
@@ -152,6 +167,7 @@ router.post("/login", async (req, res) => {
     });
   } catch (error) {
     console.log(error);
+
     return res.status(500).json({
       success: false,
       message: "Greška pri povezivanju sa bazom",
@@ -171,63 +187,19 @@ router.post("/logout", (req, res) => {
   });
 });
 
-/* ---------------- ME (OLD STYLE FIXED) ---------------- */
-router.get("/me", async (req, res) => {
-  if (!req.session.userId) {
+/* ---------------- TRENUTNO ULOGOVANI KORISNIK ---------------- */
+router.get("/me", (req, res) => {
+  if (!req.session.user) {
     return res.status(401).json({
       success: false,
       message: "Niste prijavljeni",
     });
   }
 
-  const role = req.session.role;
-
-  try {
-    let user = null;
-
-    if (role === "admin") {
-      const [rows] = await db.query(
-        "SELECT id, ime, prezime, email FROM admini WHERE id = ?",
-        [req.session.userId]
-      );
-      user = rows[0];
-    }
-
-    if (role === "firma") {
-      const [rows] = await db.query(
-        "SELECT id, naziv_firme, email FROM firme WHERE id = ?",
-        [req.session.userId]
-      );
-      user = rows[0];
-    }
-
-    if (role === "studentska_sluzba") {
-      const [rows] = await db.query(
-        "SELECT id, naziv_fakulteta, email FROM studentske_sluzbe WHERE id = ?",
-        [req.session.userId]
-      );
-      user = rows[0];
-    }
-
-    if (role === "student") {
-      const [rows] = await db.query(
-        "SELECT id, ime, prezime, studentski_email FROM studenti WHERE id = ?",
-        [req.session.userId]
-      );
-      user = rows[0];
-    }
-
-    return res.json({
-      success: true,
-      user,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: "Greška na serveru",
-    });
-  }
+  return res.json({
+    success: true,
+    user: req.session.user,
+  });
 });
 
 module.exports = router;

@@ -197,4 +197,117 @@ router.delete("/studentske-sluzbe/:id", requireAdmin, async (req, res) => {
   }
 });
 
+router.get("/settings", requireAdmin, async (req, res) => {
+  try {
+    const adminId = req.session.user.id;
+
+    const [[admin]] = await db.query(
+      `
+      SELECT id, ime, prezime, email
+      FROM admini
+      WHERE id = ?
+      `,
+      [adminId]
+    );
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin nije pronađen.",
+      });
+    }
+
+    res.json({
+      success: true,
+      admin,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju podešavanja.",
+    });
+  }
+});
+
+router.put("/settings/password", requireAdmin, async (req, res) => {
+  try {
+    const adminId = req.session.user.id;
+    const { staraLozinka, novaLozinka, potvrdaLozinke } = req.body;
+
+    if (!staraLozinka || !novaLozinka || !potvrdaLozinke) {
+      return res.status(400).json({
+        success: false,
+        message: "Sva polja su obavezna.",
+      });
+    }
+
+    if (novaLozinka !== potvrdaLozinke) {
+      return res.status(400).json({
+        success: false,
+        message: "Nova lozinka i potvrda lozinke se ne poklapaju.",
+      });
+    }
+
+    if (novaLozinka.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Nova lozinka mora imati najmanje 6 karaktera.",
+      });
+    }
+
+    const [[admin]] = await db.query(
+      `
+      SELECT id, lozinka
+      FROM admini
+      WHERE id = ?
+      `,
+      [adminId]
+    );
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin nije pronađen.",
+      });
+    }
+
+    const ispravnaStaraLozinka = await bcrypt.compare(
+      staraLozinka,
+      admin.lozinka
+    );
+
+    if (!ispravnaStaraLozinka) {
+      return res.status(400).json({
+        success: false,
+        message: "Stara lozinka nije tačna.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(novaLozinka, 10);
+
+    await db.query(
+      `
+      UPDATE admini
+      SET lozinka = ?
+      WHERE id = ?
+      `,
+      [hashedPassword, adminId]
+    );
+
+    res.json({
+      success: true,
+      message: "Lozinka je uspješno promijenjena.",
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri promjeni lozinke.",
+    });
+  }
+});
+
 module.exports = router;

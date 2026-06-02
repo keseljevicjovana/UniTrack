@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
+const bcrypt = require("bcrypt");
 
 function requireStudent(req, res, next) {
   if (!req.session.user || req.session.user.role !== "student") {
@@ -27,6 +28,13 @@ router.get("/dashboard", requireStudent, async (req, res) => {
       `,
       [studentId]
     );
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student nije pronađen.",
+      });
+    }
 
     const [rezultati] = await db.query(
       `
@@ -111,34 +119,53 @@ router.get("/dashboard", requireStudent, async (req, res) => {
   }
 });
 
-router.post("/konkursi/:id/prijava", requireStudent, async (req, res) => {
+router.get("/settings", requireStudent, async (req, res) => {
   try {
     const studentId = req.session.user.id;
-    const { id } = req.params;
 
-    await db.query(
+    const [[student]] = await db.query(
       `
-      INSERT INTO prijave_na_konkurse (konkurs_id, student_id)
-      VALUES (?, ?)
+      SELECT 
+        s.id,
+        s.ime,
+        s.prezime,
+        s.studentski_email,
+        s.jedinstveni_id,
+        s.broj_indeksa,
+        s.godina_studija,
+        s.smjer,
+        s.prikaz_na_rang_listi,
+        ss.naziv_fakulteta
+      FROM studenti s
+      JOIN studentske_sluzbe ss
+        ON s.studentska_sluzba_id = ss.id
+      WHERE s.id = ?
       `,
-      [id, studentId]
+      [studentId]
     );
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student nije pronađen.",
+      });
+    }
 
     res.json({
       success: true,
-      message: "Uspješno ste se prijavili na konkurs.",
+      student,
     });
   } catch (error) {
     console.log(error);
 
     res.status(500).json({
       success: false,
-      message: "Greška pri prijavi na konkurs.",
+      message: "Greška pri učitavanju podešavanja.",
     });
   }
 });
 
-router.put("/rang-prikaz", requireStudent, async (req, res) => {
+router.put("/settings/rang-prikaz", requireStudent, async (req, res) => {
   try {
     const studentId = req.session.user.id;
     const { prikaz_na_rang_listi } = req.body;
@@ -161,14 +188,192 @@ router.put("/rang-prikaz", requireStudent, async (req, res) => {
 
     res.json({
       success: true,
-      message: "Podešavanje prikaza je uspješno sačuvano.",
+      message: "Podešavanje prikaza na rang listi je uspješno sačuvano.",
     });
   } catch (error) {
     console.log(error);
 
     res.status(500).json({
       success: false,
-      message: "Greška pri čuvanju podešavanja.",
+      message: "Greška pri čuvanju podešavanja prikaza.",
+    });
+  }
+});
+
+router.put("/settings/password", requireStudent, async (req, res) => {
+  try {
+    const studentId = req.session.user.id;
+    const { staraLozinka, novaLozinka, potvrdaLozinke } = req.body;
+
+    if (!staraLozinka || !novaLozinka || !potvrdaLozinke) {
+      return res.status(400).json({
+        success: false,
+        message: "Sva polja su obavezna.",
+      });
+    }
+
+    if (novaLozinka !== potvrdaLozinke) {
+      return res.status(400).json({
+        success: false,
+        message: "Nova lozinka i potvrda lozinke se ne poklapaju.",
+      });
+    }
+
+    if (novaLozinka.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Nova lozinka mora imati najmanje 6 karaktera.",
+      });
+    }
+
+    const [[student]] = await db.query(
+      `
+      SELECT id, lozinka
+      FROM studenti
+      WHERE id = ?
+      `,
+      [studentId]
+    );
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student nije pronađen.",
+      });
+    }
+
+    const ispravnaStaraLozinka = await bcrypt.compare(
+      staraLozinka,
+      student.lozinka
+    );
+
+    if (!ispravnaStaraLozinka) {
+      return res.status(400).json({
+        success: false,
+        message: "Stara lozinka nije tačna.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(novaLozinka, 10);
+
+    await db.query(
+      `
+      UPDATE studenti
+      SET lozinka = ?
+      WHERE id = ?
+      `,
+      [hashedPassword, studentId]
+    );
+
+    res.json({
+      success: true,
+      message: "Lozinka je uspješno promijenjena.",
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri promjeni lozinke.",
+    });
+  }
+});
+
+router.post("/konkursi/:id/prijava", requireStudent, async (req, res) => {
+  try {
+    const studentId = req.session.user.id;
+    const { id } = req.params;
+
+    const [[konkurs]] = await db.query(
+      `
+      SELECT id, maksimalan_broj_prijava, rok_prijave
+      FROM konkursi
+      WHERE id = ?
+      `,
+      [id]
+    );
+
+    if (!konkurs) {
+      return res.status(404).json({
+        success: false,
+        message: "Konkurs nije pronađen.",
+      });
+    }
+
+    const [[postojecaPrijava]] = await db.query(
+      `
+      SELECT id
+      FROM prijave_na_konkurse
+      WHERE konkurs_id = ?
+      AND student_id = ?
+      LIMIT 1
+      `,
+      [id, studentId]
+    );
+
+    if (postojecaPrijava) {
+      await db.query(
+        `
+        DELETE FROM prijave_na_konkurse
+        WHERE konkurs_id = ?
+        AND student_id = ?
+        `,
+        [id, studentId]
+      );
+
+      return res.json({
+        success: true,
+        prijavljen: false,
+        message: "Uspješno ste se odjavili sa konkursa.",
+      });
+    }
+
+    if (new Date(konkurs.rok_prijave) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Rok za prijavu na konkurs je istekao.",
+      });
+    }
+
+    const [[brojPrijava]] = await db.query(
+      `
+      SELECT COUNT(*) AS ukupno
+      FROM prijave_na_konkurse
+      WHERE konkurs_id = ?
+      `,
+      [id]
+    );
+
+    if (
+      konkurs.maksimalan_broj_prijava &&
+      brojPrijava.ukupno >= konkurs.maksimalan_broj_prijava
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Popunjen je maksimalan broj prijava za ovaj konkurs.",
+      });
+    }
+
+    await db.query(
+      `
+      INSERT INTO prijave_na_konkurse
+      (konkurs_id, student_id)
+      VALUES (?, ?)
+      `,
+      [id, studentId]
+    );
+
+    res.json({
+      success: true,
+      prijavljen: true,
+      message: "Uspješno ste se prijavili na konkurs.",
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri prijavi/odjavi sa konkursa.",
     });
   }
 });
