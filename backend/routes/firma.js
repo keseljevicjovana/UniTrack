@@ -1,48 +1,114 @@
 const express = require("express");
 const router = express.Router();
-
 const db = require("../config/db");
-
-const requireFirma = require("../middleware/requireFirma");
 
 const multer = require("multer");
 const xlsx = require("xlsx");
-const path = require("path");
+const fs = require("fs");
 
 const upload = multer({ dest: "uploads/" });
 
-router.get("/dashboard", requireFirma, (req, res) => {
-  return res.json({
-    success: true,
-    message: "Firma dashboard",
-    firma: req.session.user
-  });
+function requireFirma(req, res, next) {
+  if (!req.session.user || req.session.user.role !== "firma") {
+    return res.status(403).json({
+      success: false,
+      message: "Nemate pristup firme.",
+    });
+  }
+
+  next();
+}
+
+router.get("/dashboard", requireFirma, async (req, res) => {
+  try {
+    const firmaId = req.session.user.id;
+
+    const [[firma]] = await db.query(
+      `
+      SELECT id, naziv_firme, email, pib, adresa, opis
+      FROM firme
+      WHERE id = ?
+      `,
+      [firmaId]
+    );
+
+    if (!firma) {
+      return res.status(404).json({
+        success: false,
+        message: "Firma nije pronađena.",
+      });
+    }
+
+    const [[brojKonkursa]] = await db.query(
+      `
+      SELECT COUNT(*) AS ukupno
+      FROM konkursi
+      WHERE firma_id = ?
+      `,
+      [firmaId]
+    );
+
+    const [[brojPrijava]] = await db.query(
+      `
+      SELECT COUNT(*) AS ukupno
+      FROM prijave_na_konkurse p
+      JOIN konkursi k ON p.konkurs_id = k.id
+      WHERE k.firma_id = ?
+      `,
+      [firmaId]
+    );
+
+    const [[brojAktivnosti]] = await db.query(
+      `
+      SELECT COUNT(*) AS ukupno
+      FROM aktivnosti_studenata
+      WHERE firma_id = ?
+      `,
+      [firmaId]
+    );
+
+    return res.json({
+      success: true,
+      message: "Firma dashboard",
+      firma,
+      statistika: {
+        konkursi: brojKonkursa.ukupno,
+        prijave: brojPrijava.ukupno,
+        aktivnosti: brojAktivnosti.ukupno,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju dashboarda firme.",
+    });
+  }
 });
 
 router.post("/konkurs", requireFirma, async (req, res) => {
   try {
+    const firmaId = req.session.user.id;
+
     const {
       naslov,
       opis,
       pozicija,
       maksimalan_broj_prijava,
-      rok_prijave
+      rok_prijave,
     } = req.body;
 
-    if (
-      !naslov ||
-      !opis ||
-      !maksimalan_broj_prijava ||
-      !rok_prijave
-    ) {
+    if (!naslov || !opis || !maksimalan_broj_prijava || !rok_prijave) {
       return res.status(400).json({
         success: false,
-        message: "Sva polja su obavezna"
+        message: "Naslov, opis, maksimalan broj prijava i rok prijave su obavezni.",
       });
     }
 
     await db.query(
-      `INSERT INTO konkursi
+      `
+      INSERT INTO konkursi
       (
         firma_id,
         naslov,
@@ -51,28 +117,28 @@ router.post("/konkurs", requireFirma, async (req, res) => {
         maksimalan_broj_prijava,
         rok_prijave
       )
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?)
+      `,
       [
-        req.session.user.id,
+        firmaId,
         naslov,
         opis,
-        pozicija,
+        pozicija || null,
         maksimalan_broj_prijava,
-        rok_prijave
+        rok_prijave,
       ]
     );
 
     return res.json({
       success: true,
-      message: "Konkurs uspješno kreiran"
+      message: "Konkurs je uspješno kreiran.",
     });
-
   } catch (error) {
     console.log(error);
 
     return res.status(500).json({
       success: false,
-      message: "Greška na serveru"
+      message: "Greška pri kreiranju konkursa.",
     });
   }
 });
@@ -81,62 +147,77 @@ router.get("/konkursi", requireFirma, async (req, res) => {
   try {
     const firmaId = req.session.user.id;
 
-    const [rows] = await db.query(
-      `SELECT id, naslov, opis, pozicija, maksimalan_broj_prijava, rok_prijave, datum_objave
-       FROM konkursi
-       WHERE firma_id = ?
-       ORDER BY datum_objave DESC`,
+    const [konkursi] = await db.query(
+      `
+      SELECT 
+        id,
+        naslov,
+        opis,
+        pozicija,
+        maksimalan_broj_prijava,
+        rok_prijave,
+        datum_objave
+      FROM konkursi
+      WHERE firma_id = ?
+      ORDER BY datum_objave DESC
+      `,
       [firmaId]
     );
 
-    res.json({
+    return res.json({
       success: true,
-      count: rows.length,
-      konkursi: rows
+      count: konkursi.length,
+      konkursi,
     });
+  } catch (error) {
+    console.log(error);
 
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Greška na serveru"
+      message: "Greška pri učitavanju konkursa.",
     });
   }
 });
 
-router.delete("/konkurs/:id", requireFirma, async (req, res) => {
+router.get("/konkurs/:id", requireFirma, async (req, res) => {
   try {
     const firmaId = req.session.user.id;
-    const konkursId = req.params.id;
+    const { id } = req.params;
 
-    // make sure firma owns this konkurs
-    const [rows] = await db.query(
-      "SELECT * FROM konkursi WHERE id = ? AND firma_id = ?",
-      [konkursId, firmaId]
+    const [[konkurs]] = await db.query(
+      `
+      SELECT 
+        id,
+        naslov,
+        opis,
+        pozicija,
+        maksimalan_broj_prijava,
+        rok_prijave,
+        datum_objave
+      FROM konkursi
+      WHERE id = ?
+        AND firma_id = ?
+      `,
+      [id, firmaId]
     );
 
-    if (rows.length === 0) {
+    if (!konkurs) {
       return res.status(404).json({
         success: false,
-        message: "Konkurs ne postoji ili nije vaš"
+        message: "Konkurs ne postoji ili ne pripada vašoj firmi.",
       });
     }
 
-    await db.query(
-      "DELETE FROM konkursi WHERE id = ?",
-      [konkursId]
-    );
-
-    res.json({
+    return res.json({
       success: true,
-      message: "Konkurs obrisan"
+      konkurs,
     });
+  } catch (error) {
+    console.log(error);
 
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Greška na serveru"
+      message: "Greška pri učitavanju konkursa.",
     });
   }
 });
@@ -144,102 +225,277 @@ router.delete("/konkurs/:id", requireFirma, async (req, res) => {
 router.put("/konkurs/:id", requireFirma, async (req, res) => {
   try {
     const firmaId = req.session.user.id;
-    const konkursId = req.params.id;
+    const { id } = req.params;
 
     const {
       naslov,
       opis,
       pozicija,
       maksimalan_broj_prijava,
-      rok_prijave
+      rok_prijave,
     } = req.body;
 
-    // check ownership
-    const [rows] = await db.query(
-      "SELECT * FROM konkursi WHERE id = ? AND firma_id = ?",
-      [konkursId, firmaId]
+    const [[konkurs]] = await db.query(
+      `
+      SELECT id
+      FROM konkursi
+      WHERE id = ?
+        AND firma_id = ?
+      `,
+      [id, firmaId]
     );
 
-    if (rows.length === 0) {
+    if (!konkurs) {
       return res.status(404).json({
         success: false,
-        message: "Konkurs ne postoji ili nije vaš"
+        message: "Konkurs ne postoji ili ne pripada vašoj firmi.",
+      });
+    }
+
+    if (!naslov || !opis || !maksimalan_broj_prijava || !rok_prijave) {
+      return res.status(400).json({
+        success: false,
+        message: "Naslov, opis, maksimalan broj prijava i rok prijave su obavezni.",
       });
     }
 
     await db.query(
-      `UPDATE konkursi
-       SET naslov = ?,
-           opis = ?,
-           pozicija = ?,
-           maksimalan_broj_prijava = ?,
-           rok_prijave = ?
-       WHERE id = ?`,
+      `
+      UPDATE konkursi
+      SET 
+        naslov = ?,
+        opis = ?,
+        pozicija = ?,
+        maksimalan_broj_prijava = ?,
+        rok_prijave = ?
+      WHERE id = ?
+        AND firma_id = ?
+      `,
       [
         naslov,
         opis,
-        pozicija,
+        pozicija || null,
         maksimalan_broj_prijava,
         rok_prijave,
-        konkursId
+        id,
+        firmaId,
       ]
     );
 
-    res.json({
+    return res.json({
       success: true,
-      message: "Konkurs ažuriran"
+      message: "Konkurs je uspješno ažuriran.",
     });
+  } catch (error) {
+    console.log(error);
 
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Greška na serveru"
+      message: "Greška pri ažuriranju konkursa.",
+    });
+  }
+});
+
+router.delete("/konkurs/:id", requireFirma, async (req, res) => {
+  try {
+    const firmaId = req.session.user.id;
+    const { id } = req.params;
+
+    const [[konkurs]] = await db.query(
+      `
+      SELECT id
+      FROM konkursi
+      WHERE id = ?
+        AND firma_id = ?
+      `,
+      [id, firmaId]
+    );
+
+    if (!konkurs) {
+      return res.status(404).json({
+        success: false,
+        message: "Konkurs ne postoji ili ne pripada vašoj firmi.",
+      });
+    }
+
+    await db.query(
+      `
+      DELETE FROM konkursi
+      WHERE id = ?
+        AND firma_id = ?
+      `,
+      [id, firmaId]
+    );
+
+    return res.json({
+      success: true,
+      message: "Konkurs je uspješno obrisan.",
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri brisanju konkursa.",
+    });
+  }
+});
+
+router.get("/prijave", requireFirma, async (req, res) => {
+  try {
+    const firmaId = req.session.user.id;
+
+    const [prijave] = await db.query(
+      `
+      SELECT 
+        p.id,
+        p.datum_prijave,
+        k.id AS konkurs_id,
+        k.naslov AS konkurs,
+        k.pozicija,
+        s.id AS student_id,
+        s.ime,
+        s.prezime,
+        s.studentski_email,
+        s.jedinstveni_id,
+        s.broj_indeksa,
+        s.godina_studija,
+        s.smjer
+      FROM prijave_na_konkurse p
+      JOIN konkursi k ON p.konkurs_id = k.id
+      JOIN studenti s ON p.student_id = s.id
+      WHERE k.firma_id = ?
+      ORDER BY p.datum_prijave DESC
+      `,
+      [firmaId]
+    );
+
+    return res.json({
+      success: true,
+      count: prijave.length,
+      prijave,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju prijava.",
+    });
+  }
+});
+
+router.get("/aktivnosti", requireFirma, async (req, res) => {
+  try {
+    const firmaId = req.session.user.id;
+
+    const [aktivnosti] = await db.query(
+      `
+      SELECT 
+        a.id,
+        a.tip,
+        a.naziv,
+        a.opis,
+        a.datum_aktivnosti,
+        a.datum_unosa,
+        s.id AS student_id,
+        s.ime,
+        s.prezime,
+        s.jedinstveni_id,
+        s.studentski_email
+      FROM aktivnosti_studenata a
+      JOIN studenti s ON a.student_id = s.id
+      WHERE a.firma_id = ?
+      ORDER BY a.datum_aktivnosti DESC
+      `,
+      [firmaId]
+    );
+
+    return res.json({
+      success: true,
+      count: aktivnosti.length,
+      aktivnosti,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju aktivnosti.",
     });
   }
 });
 
 router.post("/aktivnost", requireFirma, async (req, res) => {
   try {
-    const {
-      student_id,
-      tip,
-      naziv,
-      opis,
-      datum_aktivnosti
-    } = req.body;
+    const firmaId = req.session.user.id;
+
+    const { student_id, tip, naziv, opis, datum_aktivnosti } = req.body;
 
     if (!student_id || !tip || !naziv) {
       return res.status(400).json({
         success: false,
-        message: "Student, tip i naziv su obavezni"
+        message: "Student, tip i naziv su obavezni.",
+      });
+    }
+
+    const dozvoljeniTipovi = [
+      "dogadjaj",
+      "volontiranje",
+      "praksa",
+      "radionica",
+      "drugo",
+    ];
+
+    if (!dozvoljeniTipovi.includes(tip)) {
+      return res.status(400).json({
+        success: false,
+        message: "Neispravan tip aktivnosti.",
+      });
+    }
+
+    const [[student]] = await db.query(
+      `
+      SELECT id
+      FROM studenti
+      WHERE id = ?
+      `,
+      [student_id]
+    );
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student nije pronađen.",
       });
     }
 
     await db.query(
-      `INSERT INTO aktivnosti_studenata
+      `
+      INSERT INTO aktivnosti_studenata
       (firma_id, student_id, tip, naziv, opis, datum_aktivnosti)
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?)
+      `,
       [
-        req.session.user.id,
+        firmaId,
         student_id,
         tip,
         naziv,
         opis || null,
-        datum_aktivnosti || null
+        datum_aktivnosti || null,
       ]
     );
 
     return res.json({
       success: true,
-      message: "Aktivnost uspješno kreirana"
+      message: "Aktivnost je uspješno kreirana.",
     });
-
   } catch (error) {
     console.log(error);
+
     return res.status(500).json({
       success: false,
-      message: "Greška na serveru"
+      message: "Greška pri kreiranju aktivnosti.",
     });
   }
 });
@@ -250,10 +506,12 @@ router.post(
   upload.single("file"),
   async (req, res) => {
     try {
+      const firmaId = req.session.user.id;
+
       if (!req.file) {
         return res.status(400).json({
           success: false,
-          message: "Fajl nije uploadovan"
+          message: "Fajl nije uploadovan.",
         });
       }
 
@@ -263,43 +521,87 @@ router.post(
 
       const data = xlsx.utils.sheet_to_json(sheet);
 
-      for (const row of data) {
-        const {
-          student_identifier,
-          aktivnost,
-          bodovi
-        } = row;
+      let uspjesno = 0;
+      let preskoceno = 0;
 
-        const [student] = await db.query(
-          "SELECT id FROM studenti WHERE jedinstveni_id = ?",
-          [student_identifier]
+      for (const row of data) {
+        const studentIdentifier = row.student_identifier;
+        const aktivnost = row.aktivnost;
+        const bodovi = row.bodovi;
+        const tip = row.tip || "dogadjaj";
+
+        if (!studentIdentifier || !aktivnost) {
+          preskoceno++;
+          continue;
+        }
+
+        const dozvoljeniTipovi = [
+          "dogadjaj",
+          "volontiranje",
+          "praksa",
+          "radionica",
+          "drugo",
+        ];
+
+        if (!dozvoljeniTipovi.includes(tip)) {
+          preskoceno++;
+          continue;
+        }
+
+        const [studentRows] = await db.query(
+          `
+          SELECT id
+          FROM studenti
+          WHERE jedinstveni_id = ?
+             OR studentski_email = ?
+          LIMIT 1
+          `,
+          [studentIdentifier, studentIdentifier]
         );
 
-        if (student.length === 0) continue;
+        if (studentRows.length === 0) {
+          preskoceno++;
+          continue;
+        }
 
         await db.query(
-          `INSERT INTO aktivnosti_studenata
+          `
+          INSERT INTO aktivnosti_studenata
           (firma_id, student_id, tip, naziv, opis, datum_aktivnosti)
-          VALUES (?, ?, 'dogadjaj', ?, ?, NOW())`,
+          VALUES (?, ?, ?, ?, ?, CURDATE())
+          `,
           [
-            req.session.user.id,
-            student[0].id,
+            firmaId,
+            studentRows[0].id,
+            tip,
             aktivnost,
-            `Bodovi: ${bodovi}`
+            bodovi ? `Bodovi: ${bodovi}` : null,
           ]
         );
+
+        uspjesno++;
+      }
+
+      if (req.file && req.file.path) {
+        fs.unlink(req.file.path, () => {});
       }
 
       return res.json({
         success: true,
-        message: "Excel uspješno obrađen"
+        message: "Excel fajl je uspješno obrađen.",
+        uspjesno,
+        preskoceno,
       });
-
     } catch (error) {
       console.log(error);
+
+      if (req.file && req.file.path) {
+        fs.unlink(req.file.path, () => {});
+      }
+
       return res.status(500).json({
         success: false,
-        message: "Greška pri obradi Excel fajla"
+        message: "Greška pri obradi Excel fajla.",
       });
     }
   }
