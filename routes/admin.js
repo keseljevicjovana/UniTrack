@@ -14,8 +14,14 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ─── DASHBOARD — AŽURIRANO: dodato ime/prezime admina u "user" objekat ──────
 router.get("/dashboard", requireAdmin, async (req, res) => {
   try {
+    const [[adminInfo]] = await db.query(
+      "SELECT ime, prezime, email FROM admini WHERE id = ?",
+      [req.session.user.id]
+    );
+
     const [[brojFirmi]] = await db.query("SELECT COUNT(*) AS ukupno FROM firme");
     const [[brojStudenata]] = await db.query("SELECT COUNT(*) AS ukupno FROM studenti");
     const [[brojSluzbi]] = await db.query("SELECT COUNT(*) AS ukupno FROM studentske_sluzbe");
@@ -66,7 +72,11 @@ router.get("/dashboard", requireAdmin, async (req, res) => {
       firme,
       studentskeSluzbe,
       studenti,
-      user: req.session.user,
+      user: {
+        ...req.session.user,
+        ime: adminInfo?.ime,
+        prezime: adminInfo?.prezime,
+      },
     });
   } catch (error) {
     console.log(error);

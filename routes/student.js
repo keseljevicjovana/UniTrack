@@ -150,17 +150,20 @@ function generisiProfesionalniZakljucak(
   return `${ime} je student smjera ${smjer} koji kroz akademski rad, aktivnosti i dodatna angažovanja pokazuje razvijene kompetencije kao što su ${kompetencijeTekst}. Na osnovu zabilježenih podataka, posebno se ističu interesovanja u oblastima: ${interesovanjaTekst}. Student se preporučuje za oblasti kao što su: ${oblastiTekst}.`;
 }
 
+// ─── DASHBOARD — AŽURIRANO: dodat naziv_fakulteta, statistika, is_current_student ──
 router.get("/dashboard", requireStudent, async (req, res) => {
   try {
     const studentId = req.session.user.id;
 
     const [[student]] = await db.query(
       `
-      SELECT id, ime, prezime, jedinstveni_id, studentski_email,
-             broj_indeksa, godina_studija, smjer, studentska_sluzba_id,
-             prikaz_na_rang_listi
-      FROM studenti
-      WHERE id = ?
+      SELECT s.id, s.ime, s.prezime, s.jedinstveni_id, s.studentski_email,
+             s.broj_indeksa, s.godina_studija, s.smjer, s.studentska_sluzba_id,
+             s.prikaz_na_rang_listi, ss.naziv_fakulteta
+      FROM studenti s
+      JOIN studentske_sluzbe ss
+        ON s.studentska_sluzba_id = ss.id
+      WHERE s.id = ?
       `,
       [studentId]
     );
@@ -216,9 +219,12 @@ router.get("/dashboard", requireStudent, async (req, res) => {
       [studentId]
     );
 
-    const [rangLista] = await db.query(
+    // Rang lista — po CIJELOJ studentskoj službi (fakultetu), ne po smjeru.
+    // Sadrži student_id po redu da znamo koji je trenutni korisnik
+    const [rangListaRaw] = await db.query(
       `
       SELECT 
+        s.id AS student_id,
         ROW_NUMBER() OVER (ORDER BY bs.ukupno_bodova DESC) AS mjesto,
         CASE 
           WHEN s.prikaz_na_rang_listi = 'jedinstveni_id'
@@ -238,12 +244,29 @@ router.get("/dashboard", requireStudent, async (req, res) => {
       [student.studentska_sluzba_id]
     );
 
+    const rangLista = rangListaRaw.map((item) => ({
+      ...item,
+      is_current_student: item.student_id === studentId,
+    }));
+
+    const trenutniNaRangListi = rangLista.find((item) => item.is_current_student);
+
+    const statistika = {
+      ukupnoBodova: trenutniNaRangListi?.ukupno_bodova ?? 0,
+      pozicijaNaRangListi: trenutniNaRangListi?.mjesto ?? null,
+      akademski: trenutniNaRangListi?.akademski_bodovi ?? 0,
+      vannastavne: trenutniNaRangListi?.vannastavne_aktivnosti_bodovi ?? 0,
+      drustveni: trenutniNaRangListi?.drustveni_doprinos_bodovi ?? 0,
+      posebna: trenutniNaRangListi?.posebna_postignuca_bodovi ?? 0,
+    };
+
     res.json({
       success: true,
       student,
       rezultati,
       konkursi,
       rangLista,
+      statistika,
     });
   } catch (error) {
     console.log(error);
