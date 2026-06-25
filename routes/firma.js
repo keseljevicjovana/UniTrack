@@ -143,6 +143,7 @@ router.post("/konkurs", requireFirma, async (req, res) => {
   }
 });
 
+// ─── AŽURIRANO: dodat broj_prijava (live brojač) za svaki konkurs ────────────
 router.get("/konkursi", requireFirma, async (req, res) => {
   try {
     const firmaId = req.session.user.id;
@@ -150,16 +151,19 @@ router.get("/konkursi", requireFirma, async (req, res) => {
     const [konkursi] = await db.query(
       `
       SELECT 
-        id,
-        naslov,
-        opis,
-        pozicija,
-        maksimalan_broj_prijava,
-        rok_prijave,
-        datum_objave
-      FROM konkursi
-      WHERE firma_id = ?
-      ORDER BY datum_objave DESC
+        k.id,
+        k.naslov,
+        k.opis,
+        k.pozicija,
+        k.maksimalan_broj_prijava,
+        k.rok_prijave,
+        k.datum_objave,
+        COUNT(p.id) AS broj_prijava
+      FROM konkursi k
+      LEFT JOIN prijave_na_konkurse p ON p.konkurs_id = k.id
+      WHERE k.firma_id = ?
+      GROUP BY k.id
+      ORDER BY k.datum_objave DESC
       `,
       [firmaId]
     );
@@ -179,6 +183,7 @@ router.get("/konkursi", requireFirma, async (req, res) => {
   }
 });
 
+// ─── AŽURIRANO: dodat broj_prijava i ovdje, za konzistentnost ────────────────
 router.get("/konkurs/:id", requireFirma, async (req, res) => {
   try {
     const firmaId = req.session.user.id;
@@ -187,16 +192,19 @@ router.get("/konkurs/:id", requireFirma, async (req, res) => {
     const [[konkurs]] = await db.query(
       `
       SELECT 
-        id,
-        naslov,
-        opis,
-        pozicija,
-        maksimalan_broj_prijava,
-        rok_prijave,
-        datum_objave
-      FROM konkursi
-      WHERE id = ?
-        AND firma_id = ?
+        k.id,
+        k.naslov,
+        k.opis,
+        k.pozicija,
+        k.maksimalan_broj_prijava,
+        k.rok_prijave,
+        k.datum_objave,
+        COUNT(p.id) AS broj_prijava
+      FROM konkursi k
+      LEFT JOIN prijave_na_konkurse p ON p.konkurs_id = k.id
+      WHERE k.id = ?
+        AND k.firma_id = ?
+      GROUP BY k.id
       `,
       [id, firmaId]
     );
@@ -396,15 +404,18 @@ router.get("/aktivnosti", requireFirma, async (req, res) => {
         a.tip,
         a.naziv,
         a.opis,
+        a.bodovi,
         a.datum_aktivnosti,
         a.datum_unosa,
         s.id AS student_id,
         s.ime,
         s.prezime,
         s.jedinstveni_id,
-        s.studentski_email
+        s.studentski_email,
+        k.naslov AS naziv_konkursa
       FROM aktivnosti_studenata a
       JOIN studenti s ON a.student_id = s.id
+      LEFT JOIN konkursi k ON a.konkurs_id = k.id
       WHERE a.firma_id = ?
       ORDER BY a.datum_aktivnosti DESC
       `,
@@ -426,11 +437,12 @@ router.get("/aktivnosti", requireFirma, async (req, res) => {
   }
 });
 
+// ─── AŽURIRANO: dodato polje "bodovi" (kao broj!) i opciono "konkurs_id" ─────
 router.post("/aktivnost", requireFirma, async (req, res) => {
   try {
     const firmaId = req.session.user.id;
 
-    const { student_id, tip, naziv, opis, datum_aktivnosti } = req.body;
+    const { student_id, tip, naziv, opis, datum_aktivnosti, bodovi, konkurs_id } = req.body;
 
     if (!student_id || !tip || !naziv) {
       return res.status(400).json({
@@ -470,11 +482,21 @@ router.post("/aktivnost", requireFirma, async (req, res) => {
       });
     }
 
+    // Ako je konkurs_id prosleđen, provjeri da pripada ovoj firmi
+    let validKonkursId = null;
+    if (konkurs_id) {
+      const [[konkurs]] = await db.query(
+        "SELECT id FROM konkursi WHERE id = ? AND firma_id = ?",
+        [konkurs_id, firmaId]
+      );
+      if (konkurs) validKonkursId = konkurs.id;
+    }
+
     await db.query(
       `
       INSERT INTO aktivnosti_studenata
-      (firma_id, student_id, tip, naziv, opis, datum_aktivnosti)
-      VALUES (?, ?, ?, ?, ?, ?)
+      (firma_id, student_id, tip, naziv, opis, bodovi, datum_aktivnosti, konkurs_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         firmaId,
@@ -482,7 +504,9 @@ router.post("/aktivnost", requireFirma, async (req, res) => {
         tip,
         naziv,
         opis || null,
+        Number(bodovi) || 0,
         datum_aktivnosti || null,
+        validKonkursId,
       ]
     );
 
@@ -500,6 +524,7 @@ router.post("/aktivnost", requireFirma, async (req, res) => {
   }
 });
 
+// ─── AŽURIRANO: bodovi se čuvaju kao broj (ne više u opisu), + konkurs_naslov ──
 router.post(
   "/upload-aktivnosti",
   requireFirma,
@@ -527,8 +552,9 @@ router.post(
       for (const row of data) {
         const studentIdentifier = row.student_identifier;
         const aktivnost = row.aktivnost;
-        const bodovi = row.bodovi;
+        const bodovi = Number(row.bodovi) || 0;
         const tip = row.tip || "dogadjaj";
+        const konkursNaslov = row.konkurs_naslov || null;
 
         if (!studentIdentifier || !aktivnost) {
           preskoceno++;
@@ -564,18 +590,30 @@ router.post(
           continue;
         }
 
+        // Opciono poveži sa konkretnim konkursom (po nazivu, samo iz ove firme)
+        let konkursId = null;
+        if (konkursNaslov) {
+          const [[konkurs]] = await db.query(
+            "SELECT id FROM konkursi WHERE naslov = ? AND firma_id = ? LIMIT 1",
+            [konkursNaslov, firmaId]
+          );
+          if (konkurs) konkursId = konkurs.id;
+        }
+
         await db.query(
           `
           INSERT INTO aktivnosti_studenata
-          (firma_id, student_id, tip, naziv, opis, datum_aktivnosti)
-          VALUES (?, ?, ?, ?, ?, CURDATE())
+          (firma_id, student_id, tip, naziv, opis, bodovi, datum_aktivnosti, konkurs_id)
+          VALUES (?, ?, ?, ?, ?, ?, CURDATE(), ?)
           `,
           [
             firmaId,
             studentRows[0].id,
             tip,
             aktivnost,
-            bodovi ? `Bodovi: ${bodovi}` : null,
+            row.opis || null,
+            bodovi,
+            konkursId,
           ]
         );
 

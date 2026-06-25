@@ -324,6 +324,94 @@ router.get("/settings", requireStudent, async (req, res) => {
   }
 });
 
+// ─── MOJI REZULTATI — raspis po komponentama (prisustvo/test/kolokvijum/zavrsni) ──
+// HAVING klauzula osigurava da se predmet prikaže SAMO ako postoji bar jedan
+// kolokvijum ili završni unos (ne pišemo ocjenu bez stvarne provjere znanja).
+router.get("/rezultati", requireStudent, async (req, res) => {
+  try {
+    const studentId = req.session.user.id;
+
+    const [rezultati] = await db.query(
+      `
+      SELECT
+        r.id,
+        COALESCE(p.naziv, r.naziv) AS predmet,
+        p.semestar,
+        p.espb AS ects,
+        rs.bodovi,
+        rs.ocjena,
+        rs.polozen,
+        r.datum_objave AS datum,
+        MAX(CASE WHEN bk.tip_boda = 'prisustvo'           THEN bk.bodovi END) AS prisustvo,
+        MAX(CASE WHEN bk.tip_boda = 'test'                THEN bk.bodovi END) AS test,
+        MAX(CASE WHEN bk.tip_boda = 'kolokvijum_redovni'  THEN bk.bodovi END) AS kolokvijum_redovni,
+        MAX(CASE WHEN bk.tip_boda = 'kolokvijum_popravni' THEN bk.bodovi END) AS kolokvijum_popravni,
+        MAX(CASE WHEN bk.tip_boda = 'zavrsni_redovni'     THEN bk.bodovi END) AS zavrsni_redovni,
+        MAX(CASE WHEN bk.tip_boda = 'zavrsni_popravni'    THEN bk.bodovi END) AS zavrsni_popravni
+      FROM rezultat_studenta rs
+      JOIN rezultati r ON rs.rezultat_id = r.id
+      LEFT JOIN predmeti p ON r.predmet_id = p.id
+      LEFT JOIN bodovi_komponente bk ON bk.rezultat_id = r.id AND bk.student_id = rs.student_id
+      WHERE rs.student_id = ?
+      GROUP BY r.id, rs.id
+      HAVING SUM(CASE WHEN bk.tip_boda IN ('kolokvijum_redovni','kolokvijum_popravni','zavrsni_redovni','zavrsni_popravni') THEN 1 ELSE 0 END) > 0
+      ORDER BY r.datum_objave DESC
+      `,
+      [studentId]
+    );
+
+    res.json({
+      success: true,
+      rezultati,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju rezultata.",
+    });
+  }
+});
+
+router.get("/aktivnosti", requireStudent, async (req, res) => {
+  try {
+    const studentId = req.session.user.id;
+
+    const [aktivnosti] = await db.query(
+      `
+      SELECT 
+        a.id,
+        a.tip,
+        a.naziv,
+        a.opis,
+        a.bodovi,
+        a.datum_aktivnosti,
+        f.naziv_firme,
+        k.naslov AS naziv_konkursa
+      FROM aktivnosti_studenata a
+      LEFT JOIN firme f ON a.firma_id = f.id
+      LEFT JOIN konkursi k ON a.konkurs_id = k.id
+      WHERE a.student_id = ?
+      ORDER BY a.datum_aktivnosti DESC
+      `,
+      [studentId]
+    );
+
+    res.json({
+      success: true,
+      aktivnosti,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju aktivnosti.",
+    });
+  }
+});
+
 router.get("/digitalni-cv", requireStudent, async (req, res) => {
   try {
     const studentId = req.session.user.id;
@@ -357,17 +445,19 @@ router.get("/digitalni-cv", requireStudent, async (req, res) => {
     const [[nepolozeni]] = await db.query(
       `
       SELECT COUNT(*) AS ukupno
-      FROM predmeti p
+      FROM upisi_predmeta up
+      JOIN predmeti p
+        ON up.predmet_id = p.id
       LEFT JOIN rezultati r 
         ON r.predmet_id = p.id
       LEFT JOIN rezultat_studenta rs 
         ON rs.rezultat_id = r.id 
         AND rs.student_id = ?
-      WHERE p.studentska_sluzba_id = ?
+      WHERE up.student_id = ?
         AND p.obavezan = true
         AND (rs.bodovi IS NULL OR rs.bodovi < 50)
       `,
-      [studentId, student.studentska_sluzba_id]
+      [studentId, studentId]
     );
 
     if (nepolozeni.ukupno > 0) {
@@ -509,17 +599,19 @@ router.post("/digitalni-cv/stampanje", requireStudent, async (req, res) => {
     const [[nepolozeni]] = await db.query(
       `
       SELECT COUNT(*) AS ukupno
-      FROM predmeti p
+      FROM upisi_predmeta up
+      JOIN predmeti p
+        ON up.predmet_id = p.id
       LEFT JOIN rezultati r 
         ON r.predmet_id = p.id
       LEFT JOIN rezultat_studenta rs 
         ON rs.rezultat_id = r.id 
         AND rs.student_id = ?
-      WHERE p.studentska_sluzba_id = ?
+      WHERE up.student_id = ?
         AND p.obavezan = true
         AND (rs.bodovi IS NULL OR rs.bodovi < 50)
       `,
-      [studentId, student.studentska_sluzba_id]
+      [studentId, studentId]
     );
 
     if (nepolozeni.ukupno > 0) {

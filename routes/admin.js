@@ -320,4 +320,144 @@ router.put("/settings/password", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── UPISNI PERIOD — globalni prekidač, otvara/zatvara upis za sve sluzbe ────
+router.get("/upisni-period", requireAdmin, async (req, res) => {
+  try {
+    const [[period]] = await db.query("SELECT * FROM upisni_period WHERE id = 1");
+
+    res.json({
+      success: true,
+      period,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju upisnog perioda.",
+    });
+  }
+});
+
+router.put("/upisni-period", requireAdmin, async (req, res) => {
+  try {
+    const { aktivan, akademska_godina } = req.body;
+
+    if (aktivan) {
+      if (!akademska_godina) {
+        return res.status(400).json({
+          success: false,
+          message: "Naziv akademske godine je obavezan (npr. 2026/2027).",
+        });
+      }
+
+      await db.query(
+        `
+        UPDATE upisni_period
+        SET aktivan = 1, akademska_godina = ?, datum_otvaranja = NOW(), datum_zatvaranja = NULL
+        WHERE id = 1
+        `,
+        [akademska_godina]
+      );
+
+      return res.json({
+        success: true,
+        message: `Upisni period za ${akademska_godina}. godinu je otvoren za sve studentske službe.`,
+      });
+    }
+
+    await db.query(
+      `UPDATE upisni_period SET aktivan = 0, datum_zatvaranja = NOW() WHERE id = 1`
+    );
+
+    res.json({
+      success: true,
+      message: "Upisni period je zatvoren.",
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri ažuriranju upisnog perioda.",
+    });
+  }
+});
+
+// ─── PRIVREMENA RUTA — samo za kreiranje PRVOG admina. OBRIŠI OVU RUTU NAKON
+// ŠTO JE ISKORISTIŠ JEDNOM (nije zaštićena, jer još ne postoji admin koji bi
+// je zaštitio) ─────────────────────────────────────────────────────────────
+router.post("/setup-prvi-admin", async (req, res) => {
+  try {
+    const { ime, prezime, email, lozinka } = req.body;
+
+    if (!ime || !prezime || !email || !lozinka) {
+      return res.status(400).json({
+        success: false,
+        message: "Sva polja su obavezna.",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(lozinka, 10);
+
+    await db.query(
+      `
+      INSERT INTO admini
+      (uloga_id, ime, prezime, email, lozinka)
+      VALUES (1, ?, ?, ?, ?)
+      `,
+      [ime, prezime, email, hashedPassword]
+    );
+
+    res.json({
+      success: true,
+      message: "Admin je uspješno dodat.",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      message: "Greška pri dodavanju admina.",
+    });
+  }
+});
+
+// ─── RANG LISTA — svi studenti, sa svih fakulteta, rangirani po bodovima ────
+router.get("/rang-lista", requireAdmin, async (req, res) => {
+  try {
+    const [rangLista] = await db.query(`
+      SELECT 
+        ROW_NUMBER() OVER (ORDER BY bs.ukupno_bodova DESC) AS mjesto,
+        CASE 
+          WHEN s.prikaz_na_rang_listi = 'jedinstveni_id'
+          THEN s.jedinstveni_id
+          ELSE CONCAT(s.ime, ' ', s.prezime)
+        END AS prikaz_studenta,
+        s.smjer,
+        ss.naziv_fakulteta,
+        bs.akademski_bodovi,
+        bs.vannastavne_aktivnosti_bodovi,
+        bs.drustveni_doprinos_bodovi,
+        bs.posebna_postignuca_bodovi,
+        bs.ukupno_bodova
+      FROM bodovi_studenata bs
+      JOIN studenti s ON bs.student_id = s.id
+      JOIN studentske_sluzbe ss ON s.studentska_sluzba_id = ss.id
+      ORDER BY bs.ukupno_bodova DESC
+    `);
+
+    res.json({
+      success: true,
+      rangLista,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri učitavanju rang liste.",
+    });
+  }
+});
+
 module.exports = router;
