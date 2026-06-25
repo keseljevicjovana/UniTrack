@@ -1,4 +1,4 @@
-DROP DATABASE IF EXISTS unitrack;
+DROP DATABASE IF EXISTS unitrack_db;
 
 CREATE DATABASE unitrack
 CHARACTER SET utf8mb4
@@ -238,3 +238,160 @@ CREATE TABLE zahtjevi_za_stampanje_cv (
         REFERENCES studentske_sluzbe(id)
         ON DELETE CASCADE
 );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- Pokreni ovo u MySQL Workbench-u, na POSTOJEĆOJ bazi "unitrack" (Query tab)
+-- Ovo SAMO DODAJE — ne briše ništa, ne pravi novu bazu.
+-- Bezbedno je pokrenuti i ako je dio ovoga već urađeno (koristi IF NOT EXISTS svuda).
+
+
+
+-- 1. Dodaj kolonu "godina_studija" na postojeću tabelu "predmeti"
+--    (potrebno za tab "Predmeti" i "Upis godine" u Sluzba dashboardu)
+ALTER TABLE predmeti
+ADD COLUMN godina_studija INT NOT NULL DEFAULT 1 AFTER semestar;
+
+-- 2. Nova tabela: upisni period (da li je trenutno otvoren upis godine)
+CREATE TABLE IF NOT EXISTS upisni_period (
+    id INT PRIMARY KEY DEFAULT 1,
+    aktivan TINYINT(1) NOT NULL DEFAULT 0,
+    akademska_godina VARCHAR(20) DEFAULT NULL,
+    datum_otvaranja TIMESTAMP NULL,
+    datum_zatvaranja TIMESTAMP NULL
+);
+
+INSERT IGNORE INTO upisni_period (id, aktivan) VALUES (1, 0);
+
+-- 3. Nova tabela: upisi studenata na predmete (po akademskoj godini)
+CREATE TABLE IF NOT EXISTS upisi_predmeta (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    predmet_id INT NOT NULL,
+    akademska_godina VARCHAR(20) NOT NULL,
+    godina_studija INT NOT NULL,
+    datum_upisa TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uniq_upis (student_id, predmet_id, akademska_godina),
+
+    FOREIGN KEY (student_id)
+        REFERENCES studenti(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (predmet_id)
+        REFERENCES predmeti(id)
+        ON DELETE CASCADE
+);
+
+-- 4. Nova tabela: komponente bodova po tipu (prisustvo/test/kolokvijum.../zavrsni...)
+CREATE TABLE IF NOT EXISTS bodovi_komponente (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    rezultat_id INT NOT NULL,
+    student_id INT NOT NULL,
+    tip_boda ENUM(
+        'prisustvo',
+        'test',
+        'kolokvijum_redovni',
+        'kolokvijum_popravni',
+        'zavrsni_redovni',
+        'zavrsni_popravni'
+    ) NOT NULL,
+    bodovi DECIMAL(6,2) NOT NULL DEFAULT 0,
+    datum_unosa TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uniq_komponenta (rezultat_id, student_id, tip_boda),
+
+    FOREIGN KEY (rezultat_id)
+        REFERENCES rezultati(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (student_id)
+        REFERENCES studenti(id)
+        ON DELETE CASCADE
+);
+
+
+
+
+
+
+
+
+
+
+
+ 
+-- Bodovi koje aktivnost donosi studentu (volontiranje, praksa, događaj...)
+ALTER TABLE aktivnosti_studenata
+ADD COLUMN bodovi DECIMAL(6,2) NOT NULL DEFAULT 0 AFTER opis;
+ 
+-- Veza sa konkretnim konkursom (opciono - npr. ako je student dobio aktivnost
+-- kroz konkurs na koji se prijavio; NULL ako je aktivnost uneta ručno bez konkursa)
+ALTER TABLE aktivnosti_studenata
+ADD COLUMN konkurs_id INT NULL AFTER firma_id;
+ 
+-- NAPOMENA: ako sljedeća komanda baci grešku "Duplicate foreign key" ili slično,
+-- znači da je veza već dodata ranije - samo preskoči ovu komandu i nastavi dalje.
+ALTER TABLE aktivnosti_studenata
+ADD CONSTRAINT fk_aktivnost_konkurs
+    FOREIGN KEY (konkurs_id) REFERENCES konkursi(id) ON DELETE SET NULL;
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ USE unitrack;
+
+-- Dodaje smjer na predmete (opciono - NULL = zajednicki predmet za sve smjerove)
+ALTER TABLE predmeti
+ADD COLUMN smjer VARCHAR(100) NULL AFTER naziv;
+
+
+
+
+
+
+
+-- OPCIONO: Ukloni stare "Programiranje 1" / "Baze podataka" unose koji su nastali
+-- prije novog sistema komponenti bodova (nemaju predmet_id, nemaju bodovi_komponente).
+-- Ovo je bezbedno - briše SAMO rezultate koji nikad nisu imali kolokvijum/zavrsni unos.
+
+USE unitrack;
+
+DELETE rs FROM rezultat_studenta rs
+JOIN rezultati r ON rs.rezultat_id = r.id
+WHERE r.predmet_id IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM bodovi_komponente bk WHERE bk.rezultat_id = r.id
+  );
+
+DELETE FROM rezultati
+WHERE predmet_id IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM rezultat_studenta rs WHERE rs.rezultat_id = rezultati.id
+  );
+  
