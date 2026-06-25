@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../api/api";
 import Modal, { ConfirmModal, FormInput } from "../../components/admin/Modal";
 import Alert from "../../components/admin/Alert";
@@ -12,16 +12,18 @@ const IcoUpload   = () => <svg className="w-[18px] h-[18px]" fill="none" stroke=
 const IcoPlus     = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>;
 const IcoBell     = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>;
 const IcoCheck    = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>;
+const IcoSearch   = () => <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/></svg>;
+const IcoFilter   = () => <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 4h18M6 8h12M9 12h6M11 16h2"/></svg>;
 
 // ─── NAV ─────────────────────────────────────────────────────────────────────
 const NAV = [
   { id: "pregled",   label: "Početna",        Icon: IcoHome   },
   { id: "konkursi",  label: "Moji konkursi",  Icon: IcoList   },
+  { id: "prijave",   label: "Prijave",        Icon: IcoCheck  },
   { id: "aktivnosti",label: "Aktivnosti",     Icon: IcoCheck  },
   { id: "upload",    label: "Upload Excel",   Icon: IcoUpload },
 ];
 
-// ─── BOSANSKI NAZIVI MJESECI U NOMINATIVU (npr. "19. jun 2026.") ─────────────
 const MJESECI = [
   "januar", "februar", "mart", "april", "maj", "jun",
   "jul", "avgust", "septembar", "oktobar", "novembar", "decembar",
@@ -32,7 +34,6 @@ const formatirajDatum = (datum) => {
   return `${d.getDate()}. ${MJESECI[d.getMonth()]} ${d.getFullYear()}.`;
 };
 
-// ─── SPINNER ─────────────────────────────────────────────────────────────────
 const Spinner = () => (
   <div className="flex flex-col items-center justify-center py-16 gap-3 text-[#8B7355] text-sm">
     <div className="w-7 h-7 border-2 border-[#DDD0BE] border-t-[#6B4C2A] rounded-full animate-spin" />
@@ -40,7 +41,6 @@ const Spinner = () => (
   </div>
 );
 
-// ─── SECTION ─────────────────────────────────────────────────────────────────
 const Section = ({ title, count, action, children }) => (
   <div className="bg-white border border-[#E8DDD0] rounded-2xl overflow-hidden mb-6 shadow-sm">
     <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE5DA]">
@@ -58,7 +58,6 @@ const Section = ({ title, count, action, children }) => (
   </div>
 );
 
-// ─── STAT CARD ───────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, sub, icon }) => (
   <div className="bg-white border border-[#E8DDD0] rounded-2xl p-6 shadow-sm hover:-translate-y-1 transition-transform duration-200">
     <div className="flex items-start justify-between mb-4">
@@ -70,7 +69,6 @@ const StatCard = ({ title, value, sub, icon }) => (
   </div>
 );
 
-// ─── MAIN ────────────────────────────────────────────────────────────────────
 const FirmaDashboard = () => {
   const [tab, setTab]         = useState("pregled");
   const [firma, setFirma]     = useState(null);
@@ -78,26 +76,34 @@ const FirmaDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [alert, setAlert]     = useState({ msg: "", type: "" });
 
-  // modali
   const [konkursModal,  setKonkursModal]  = useState(false);
   const [editModal,     setEditModal]     = useState(false);
   const [editItem,      setEditItem]      = useState(null);
   const [confirm,       setConfirm]       = useState({ open: false, item: null });
   const [aktivnostModal, setAktivnostModal] = useState(false);
 
-  // forme
   const emptyKonkurs = { naslov: "", opis: "", pozicija: "", maksimalan_broj_prijava: "", rok_prijave: "" };
   const [konkursForm, setKonkursForm] = useState(emptyKonkurs);
-  const [aktivnostForm, setAktivnostForm] = useState({ student_id: "", tip: "dogadjaj", naziv: "", opis: "", datum_aktivnosti: "" });
+  const [aktivnostForm, setAktivnostForm] = useState({ student_id: "", tip: "dogadjaj", naziv: "", opis: "", datum_aktivnosti: "", bodovi: "", konkurs_id: "" });
 
-  // upload
+  // Prijave (ko se prijavio na konkurse)
+  const [prijave, setPrijave] = useState([]);
+  const [prijaveLoaded, setPrijaveLoaded] = useState(false);
+  const [prijaveLoading, setPrijaveLoading] = useState(false);
+  const [odabraniKonkursId, setOdabraniKonkursId] = useState(null);
+
   const [uploadFile,    setUploadFile]    = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
+
+  // pretraga i filteri za "Moji konkursi"
+  const [konkursiPretraga, setKonkursiPretraga] = useState("");
+  const [naprednoOtvoreno, setNaprednoOtvoreno] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("svi"); // svi | aktivan | istekao
+  const [sortBy, setSortBy] = useState("najnoviji");
 
   const showAlert = (msg, type = "success") => setAlert({ msg, type });
   const hideAlert = () => setAlert({ msg: "", type: "" });
 
-  // ── FETCH ──────────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -116,7 +122,68 @@ const FirmaDashboard = () => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── DODAJ KONKURS ──────────────────────────────────────────────────────────
+  // ─── Prijave — ko se prijavio na konkurse (učitava se kad se otvori tab) ───
+  const fetchPrijave = useCallback(async () => {
+    setPrijaveLoading(true);
+    try {
+      const res = await api.get("/firma/prijave");
+      if (res.data.success) {
+        setPrijave(res.data.prijave);
+        setPrijaveLoaded(true);
+      }
+    } catch {
+      showAlert("Greška pri učitavanju prijava.", "error");
+    } finally {
+      setPrijaveLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "prijave" && !prijaveLoaded) fetchPrijave();
+  }, [tab, prijaveLoaded, fetchPrijave]);
+
+  const filtriraniKonkursi = useMemo(() => {
+    const danas = new Date();
+    let rezultat = konkursi.filter((k) => {
+      if (konkursiPretraga.trim()) {
+        const q = konkursiPretraga.trim().toLowerCase();
+        if (!`${k.naslov} ${k.pozicija || ""}`.toLowerCase().includes(q)) return false;
+      }
+
+      const istekao = new Date(k.rok_prijave) < danas;
+      if (filterStatus === "aktivan" && istekao) return false;
+      if (filterStatus === "istekao" && !istekao) return false;
+
+      return true;
+    });
+
+    rezultat = [...rezultat].sort((a, b) => {
+      if (sortBy === "najvise_prijava") return (b.broj_prijava || 0) - (a.broj_prijava || 0);
+      if (sortBy === "najmanje_prijava") return (a.broj_prijava || 0) - (b.broj_prijava || 0);
+      return new Date(b.datum_objave) - new Date(a.datum_objave);
+    });
+
+    return rezultat;
+  }, [konkursi, konkursiPretraga, filterStatus, sortBy]);
+
+  // "Svi konkursi" — vraća pretragu, filtere i sortiranje na default (najnoviji prvo)
+  const resetSveNaDefault = () => {
+    setKonkursiPretraga("");
+    setFilterStatus("svi");
+    setSortBy("najnoviji");
+  };
+
+  // ─── Prijave filtrirane po odabranom konkursu (master-detail prikaz) ───────
+  const prijaveZaOdabraniKonkurs = useMemo(() => {
+    if (!odabraniKonkursId) return [];
+    return prijave.filter((p) => p.konkurs_id === odabraniKonkursId);
+  }, [prijave, odabraniKonkursId]);
+
+  const resetFiltere = () => {
+    setFilterStatus("svi");
+    setSortBy("najnoviji");
+  };
+
   const dodajKonkurs = async () => {
     if (!konkursForm.naslov || !konkursForm.opis || !konkursForm.maksimalan_broj_prijava || !konkursForm.rok_prijave) {
       showAlert("Sva obavezna polja moraju biti popunjena.", "error"); return;
@@ -132,7 +199,6 @@ const FirmaDashboard = () => {
     } catch { showAlert("Greška pri kreiranju konkursa.", "error"); }
   };
 
-  // ── IZMIJENI KONKURS ───────────────────────────────────────────────────────
   const otvoriEdit = (k) => {
     setEditItem(k);
     setKonkursForm({
@@ -158,7 +224,6 @@ const FirmaDashboard = () => {
     } catch { showAlert("Greška pri ažuriranju.", "error"); }
   };
 
-  // ── OBRIŠI KONKURS ─────────────────────────────────────────────────────────
   const handleDelete = async () => {
     try {
       const res = await api.delete(`/firma/konkurs/${confirm.item.id}`);
@@ -170,7 +235,6 @@ const FirmaDashboard = () => {
     } catch { showAlert("Greška pri brisanju.", "error"); }
   };
 
-  // ── DODAJ AKTIVNOST ────────────────────────────────────────────────────────
   const dodajAktivnost = async () => {
     if (!aktivnostForm.student_id || !aktivnostForm.naziv) {
       showAlert("Student ID i naziv su obavezni.", "error"); return;
@@ -179,13 +243,12 @@ const FirmaDashboard = () => {
       const res = await api.post("/firma/aktivnost", aktivnostForm);
       if (res.data.success) {
         setAktivnostModal(false);
-        setAktivnostForm({ student_id: "", tip: "dogadjaj", naziv: "", opis: "", datum_aktivnosti: "" });
+        setAktivnostForm({ student_id: "", tip: "dogadjaj", naziv: "", opis: "", datum_aktivnosti: "", bodovi: "", konkurs_id: "" });
         showAlert("Aktivnost je uspješno dodana!");
       } else showAlert(res.data.message || "Greška.", "error");
     } catch { showAlert("Greška pri dodavanju aktivnosti.", "error"); }
   };
 
-  // ── UPLOAD EXCEL ───────────────────────────────────────────────────────────
   const uploadExcel = async () => {
     if (!uploadFile) { showAlert("Odaberite Excel fajl.", "error"); return; }
     setUploadLoading(true);
@@ -210,7 +273,6 @@ const FirmaDashboard = () => {
   return (
     <div className="flex min-h-screen" style={{ background: "#EAE4DC", fontFamily: "'Inter', sans-serif" }}>
 
-      {/* ── SIDEBAR ── */}
       <aside className="w-[240px] flex-shrink-0 fixed left-0 top-0 h-screen flex flex-col" style={{ background: "#F2EBE1" }}>
         <div className="flex items-center gap-2.5 px-6 py-5 border-b border-[#DDD0BE]">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#8B6340" }}>
@@ -246,18 +308,13 @@ const FirmaDashboard = () => {
         </div>
       </aside>
 
-      {/* ── MAIN ── */}
       <div className="ml-[240px] flex-1 flex flex-col min-h-screen">
         <header className="h-[64px] flex items-center justify-between px-8 sticky top-0 z-30 border-b border-[#DDD0BE]" style={{ background: "#F2EBE1" }}>
           <div />
           <div className="flex items-center gap-4">
             <span className="text-[13px] text-[#8B7355]">Partnerska firma</span>
             <span className="text-xs text-[#8B7355] bg-[#F5EFE7] border border-[#DDD0BE] px-4 py-1.5 rounded-full">{today}</span>
-            <button className="text-[#8B7355] hover:text-[#5C4033] transition-colors">
-              <IcoBell />
-            </button>
 
-            {/* Avatar krug (otvara lične podatke) + posebno dugme za odjavu — povlači stvarne podatke o firmi iz baze */}
             <UserDropdown
               inicijali={firmaNaziv[0]?.toUpperCase()}
               naziv={firmaNaziv}
@@ -278,7 +335,6 @@ const FirmaDashboard = () => {
             <div className="p-8">
               <Alert message={alert.msg} type={alert.type} onClose={hideAlert} />
 
-              {/* ── POČETNA ── */}
               {tab === "pregled" && (
                 <>
                   <div className="mb-7">
@@ -302,7 +358,6 @@ const FirmaDashboard = () => {
                         />
                       </div>
 
-                      {/* Najnoviji konkursi */}
                       <div>
                         <div className="flex items-center gap-4 mb-4">
                           <h2 className="text-[15px] font-bold text-[#2C1A0E] whitespace-nowrap">Najnoviji konkursi</h2>
@@ -331,11 +386,10 @@ const FirmaDashboard = () => {
                 </>
               )}
 
-              {/* ── KONKURSI ── */}
               {tab === "konkursi" && (
                 <Section
                   title="Moji konkursi"
-                  count={`${konkursi.length} konkursa`}
+                  count={`${filtriraniKonkursi.length} / ${konkursi.length} konkursa`}
                   action={
                     <button
                       onClick={() => setKonkursModal(true)}
@@ -346,17 +400,147 @@ const FirmaDashboard = () => {
                     </button>
                   }
                 >
-                  {loading ? <Spinner /> : (
-                    <KonkursiTable
-                      data={konkursi}
-                      onEdit={otvoriEdit}
-                      onDelete={(k) => setConfirm({ open: true, item: k })}
-                    />
-                  )}
+                  <div className="p-4">
+                    <div className="flex items-center gap-3 mb-3 flex-wrap">
+                      <div className="relative flex-1 min-w-[220px]">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#A89682]">
+                          <IcoSearch />
+                        </div>
+                        <input
+                          type="text"
+                          value={konkursiPretraga}
+                          onChange={(e) => setKonkursiPretraga(e.target.value)}
+                          placeholder="Brza pretraga — naslov ili pozicija..."
+                          className="w-full pl-9 pr-4 py-2.5 border border-[#DDD0BE] rounded-xl text-sm outline-none focus:border-[#A0784A] bg-[#FAF7F3]"
+                        />
+                      </div>
+                      <button
+                        onClick={resetSveNaDefault}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[12.5px] font-semibold border border-[#DDD0BE] bg-white text-[#6B4C2A] hover:bg-[#F5EFE7] transition-colors"
+                      >
+                        Svi konkursi
+                      </button>
+                      <button
+                        onClick={() => setNaprednoOtvoreno((v) => !v)}
+                        className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[12.5px] font-semibold border transition-colors ${
+                          naprednoOtvoreno
+                            ? "bg-[#A0784A] text-white border-transparent"
+                            : "bg-white text-[#6B4C2A] border-[#DDD0BE] hover:bg-[#F5EFE7]"
+                        }`}
+                      >
+                        <IcoFilter /> FILTERI
+                      </button>
+                    </div>
+
+                    {naprednoOtvoreno && (
+                      <div className="bg-[#FAF7F3] border border-[#EDE5DA] rounded-xl p-4 mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-[#8B7355] mb-1">Status</label>
+                          <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                            className="w-full px-3 py-2 border border-[#DDD0BE] rounded-lg text-[12.5px] outline-none focus:border-[#A0784A] bg-white"
+                          >
+                            <option value="svi">Svi konkursi</option>
+                            <option value="aktivan">Aktivni</option>
+                            <option value="istekao">Istekli</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-[#8B7355] mb-1">Sortiraj po</label>
+                          <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="w-full px-3 py-2 border border-[#DDD0BE] rounded-lg text-[12.5px] outline-none focus:border-[#A0784A] bg-white"
+                          >
+                            <option value="najnoviji">Najnoviji prvo</option>
+                            <option value="najvise_prijava">Najviše prijava</option>
+                            <option value="najmanje_prijava">Najmanje prijava</option>
+                          </select>
+                        </div>
+                        <div className="md:col-span-2 flex justify-end">
+                          <button onClick={resetFiltere} className="text-[12px] font-semibold text-[#A0784A] hover:underline">
+                            Poništi filtere
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {loading ? <Spinner /> : (
+                      <KonkursiTable
+                        data={filtriraniKonkursi}
+                        onEdit={otvoriEdit}
+                        onDelete={(k) => setConfirm({ open: true, item: k })}
+                      />
+                    )}
+                  </div>
                 </Section>
               )}
 
-              {/* ── AKTIVNOSTI ── */}
+              {tab === "prijave" && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* LIJEVO — lista konkursa sa brojem prijava */}
+                  <Section title="Vaši konkursi" count={`${konkursi.length} konkursa`}>
+                    {prijaveLoading ? <Spinner /> : (
+                      <div className="divide-y divide-[#F0E8DC]">
+                        {konkursi.length === 0 ? (
+                          <div className="p-6 text-center text-[#8B7355] text-sm">Nemate objavljenih konkursa.</div>
+                        ) : konkursi.map((k) => (
+                          <button
+                            key={k.id}
+                            onClick={() => setOdabraniKonkursId(k.id)}
+                            className={`w-full text-left flex items-center justify-between gap-3 px-6 py-4 transition-colors ${
+                              odabraniKonkursId === k.id ? "bg-[#FDF9F3]" : "hover:bg-[#FAF7F3]"
+                            }`}
+                            style={odabraniKonkursId === k.id ? { boxShadow: "inset 3px 0 0 #A0784A" } : {}}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-[13.5px] font-semibold text-[#2C1A0E] truncate">{k.naslov}</p>
+                              <p className="text-[11px] text-[#8B7355] mt-0.5">Rok: {formatirajDatum(k.rok_prijave)}</p>
+                            </div>
+                            <span
+                              className="text-[12px] font-bold px-3 py-1.5 rounded-full flex-shrink-0"
+                              style={{ background: "#F5EFE7", color: "#6B4C2A" }}
+                            >
+                              {k.broj_prijava || 0} / {k.maksimalan_broj_prijava}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </Section>
+
+                  {/* DESNO — prijave za izabrani konkurs */}
+                  <Section
+                    title={odabraniKonkursId ? `Prijavljeni — ${konkursi.find((k) => k.id === odabraniKonkursId)?.naslov || ""}` : "Prijavljeni studenti"}
+                    count={odabraniKonkursId ? `${prijaveZaOdabraniKonkurs.length} prijava` : undefined}
+                  >
+                    {!odabraniKonkursId ? (
+                      <div className="p-10 text-center text-[#8B7355] text-sm">
+                        ← Izaberite konkurs sa lijeve strane da vidite ko se prijavio.
+                      </div>
+                    ) : prijaveZaOdabraniKonkurs.length === 0 ? (
+                      <div className="p-10 text-center text-[#8B7355] text-sm">Još nema prijava na ovaj konkurs.</div>
+                    ) : (
+                      <div className="divide-y divide-[#F0E8DC]">
+                        {prijaveZaOdabraniKonkurs.map((p) => (
+                          <div key={p.id} className="px-6 py-4">
+                            <p className="text-[13.5px] font-semibold text-[#2C1A0E]">{p.ime} {p.prezime}</p>
+                            <p className="text-[11.5px] text-[#8B7355] mt-0.5">
+                              {p.jedinstveni_id} · {p.studentski_email} · {p.smjer}
+                            </p>
+                            <p className="text-[10.5px] text-[#A89682] mt-1">
+                              Prijavljen: {formatirajDatum(p.datum_prijave)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Section>
+                </div>
+              )}
+
+
               {tab === "aktivnosti" && (
                 <Section
                   title="Dodaj aktivnost studentu"
@@ -376,12 +560,11 @@ const FirmaDashboard = () => {
                 </Section>
               )}
 
-              {/* ── UPLOAD ── */}
               {tab === "upload" && (
                 <Section title="Upload Excel fajla">
                   <div className="px-6 py-8">
                     <p className="text-[13px] text-[#8B7355] mb-6">
-                      Excel fajl mora imati kolone: <strong>student_identifier</strong>, <strong>aktivnost</strong>, <strong>bodovi</strong>
+                      Excel fajl mora imati kolone: <strong>student_identifier</strong>, <strong>aktivnost</strong>, <strong>bodovi</strong>. Opciono: <strong>tip</strong> (dogadjaj/volontiranje/praksa/radionica/drugo), <strong>konkurs_naslov</strong> (ako želite da povežete aktivnost sa konkretnim konkursom), <strong>opis</strong>.
                     </p>
                     <div className="border-2 border-dashed border-[#DDD0BE] rounded-xl p-8 text-center mb-6 hover:border-[#A0784A] transition-colors">
                       <IcoUpload />
@@ -421,7 +604,6 @@ const FirmaDashboard = () => {
         </div>
       </div>
 
-      {/* ── MODAL: NOVI KONKURS ── */}
       <Modal open={konkursModal} onClose={() => { setKonkursModal(false); setKonkursForm(emptyKonkurs); }} title="Novi konkurs" subtitle="Kreirajte oglas za volontiranje ili praksu">
         <FormInput label="Naslov" required placeholder="npr. IT volonter" value={konkursForm.naslov} onChange={(e) => setKonkursForm({ ...konkursForm, naslov: e.target.value })} />
         <FormInput label="Opis" required placeholder="Opis pozicije i uslova..." as="textarea" value={konkursForm.opis} onChange={(e) => setKonkursForm({ ...konkursForm, opis: e.target.value })} />
@@ -437,7 +619,6 @@ const FirmaDashboard = () => {
         </div>
       </Modal>
 
-      {/* ── MODAL: IZMJENA KONKURSA ── */}
       <Modal open={editModal} onClose={() => { setEditModal(false); setKonkursForm(emptyKonkurs); }} title="Izmijeni konkurs" subtitle="Ažurirajte podatke o konkursu">
         <FormInput label="Naslov" required placeholder="npr. IT volonter" value={konkursForm.naslov} onChange={(e) => setKonkursForm({ ...konkursForm, naslov: e.target.value })} />
         <FormInput label="Opis" required placeholder="Opis pozicije..." as="textarea" value={konkursForm.opis} onChange={(e) => setKonkursForm({ ...konkursForm, opis: e.target.value })} />
@@ -453,7 +634,6 @@ const FirmaDashboard = () => {
         </div>
       </Modal>
 
-      {/* ── MODAL: AKTIVNOST ── */}
       <Modal open={aktivnostModal} onClose={() => setAktivnostModal(false)} title="Dodaj aktivnost" subtitle="Ručno dodajte aktivnost za studenta">
         <FormInput label="Student ID" required placeholder="Jedinstveni ID studenta" value={aktivnostForm.student_id} onChange={(e) => setAktivnostForm({ ...aktivnostForm, student_id: e.target.value })} />
         <div className="mb-4">
@@ -472,6 +652,18 @@ const FirmaDashboard = () => {
         </div>
         <FormInput label="Naziv" required placeholder="Naziv aktivnosti" value={aktivnostForm.naziv} onChange={(e) => setAktivnostForm({ ...aktivnostForm, naziv: e.target.value })} />
         <FormInput label="Opis" placeholder="Kratki opis..." as="textarea" value={aktivnostForm.opis} onChange={(e) => setAktivnostForm({ ...aktivnostForm, opis: e.target.value })} />
+        <FormInput label="Bodovi" type="number" placeholder="npr. 10" value={aktivnostForm.bodovi} onChange={(e) => setAktivnostForm({ ...aktivnostForm, bodovi: e.target.value })} />
+        <div className="mb-4">
+          <label className="block text-xs font-semibold tracking-wider uppercase text-[#8B7355] mb-1.5">Konkurs (opciono)</label>
+          <select
+            value={aktivnostForm.konkurs_id}
+            onChange={(e) => setAktivnostForm({ ...aktivnostForm, konkurs_id: e.target.value })}
+            className="w-full px-4 py-2.5 border border-[#DDD0BE] rounded-xl text-sm text-[#2C1A0E] bg-[#F5EFE7] focus:outline-none focus:border-[#6B4C2A] focus:bg-white transition-colors"
+          >
+            <option value="">— Nije povezano sa konkursom —</option>
+            {konkursi.map((k) => <option key={k.id} value={k.id}>{k.naslov}</option>)}
+          </select>
+        </div>
         <FormInput label="Datum aktivnosti" type="date" value={aktivnostForm.datum_aktivnosti} onChange={(e) => setAktivnostForm({ ...aktivnostForm, datum_aktivnosti: e.target.value })} />
         <div className="flex gap-3 justify-end mt-6">
           <button onClick={() => setAktivnostModal(false)} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-[#F5EFE7] text-[#8B7355] border border-[#DDD0BE] hover:bg-[#EDE3D6] transition-colors">Otkaži</button>
@@ -482,7 +674,6 @@ const FirmaDashboard = () => {
         </div>
       </Modal>
 
-      {/* ── CONFIRM DELETE ── */}
       <ConfirmModal
         open={confirm.open}
         onClose={() => setConfirm({ open: false, item: null })}
