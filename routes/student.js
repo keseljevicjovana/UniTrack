@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
+const { generisiAiZakljucak } = require("../utils/aiProfil");
 
 function requireStudent(req, res, next) {
   if (!req.session.user || req.session.user.role !== "student") {
@@ -425,6 +426,7 @@ router.get("/digitalni-cv", requireStudent, async (req, res) => {
         s.studentski_email,
         s.broj_indeksa,
         s.smjer,
+        s.profesionalni_profil_ai,
         ss.id AS studentska_sluzba_id,
         ss.naziv_fakulteta
       FROM studenti s
@@ -531,12 +533,25 @@ router.get("/digitalni-cv", requireStudent, async (req, res) => {
 
     const analiza = generisiKompetencije(student, aktivnosti);
 
-    const profesionalniZakljucak = generisiProfesionalniZakljucak(
-      student,
-      analiza.kompetencije,
-      analiza.interesovanja,
-      analiza.preporuceneOblasti
-    );
+    // ─── AI profesionalni profil — generiše se SAMO JEDNOM po studentu,
+    // čuva se u bazi. Sluzba kasnije koristi ISTI sačuvani tekst za PDF,
+    // pa nema neslaganja i nema dodatnih troškova po pregledu. ───────────────
+    let profesionalniZakljucak = student.profesionalni_profil_ai;
+
+    if (!profesionalniZakljucak) {
+      profesionalniZakljucak = await generisiAiZakljucak(
+        student,
+        analiza.kompetencije,
+        analiza.interesovanja,
+        analiza.preporuceneOblasti,
+        aktivnosti
+      );
+
+      await db.query(
+        `UPDATE studenti SET profesionalni_profil_ai = ? WHERE id = ?`,
+        [profesionalniZakljucak, studentId]
+      );
+    }
 
     res.json({
       success: true,

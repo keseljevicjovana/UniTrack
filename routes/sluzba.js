@@ -7,8 +7,111 @@ const multer = require("multer");
 const XLSX = require("xlsx");
 
 const requireSluzba = require("../middleware/requireSluzba");
+const { generisiCvPdf } = require("../utils/pdfGenerator");
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+// ─── Iste funkcije kao u student.js — potrebne da bismo generisali identičan
+// CV sadržaj kad sluzba preuzima PDF (mora se poklapati sa onim što student
+// vidi u svom Digitalnom CV-u) ────────────────────────────────────────────────
+function generisiKompetencije(student, aktivnosti) {
+  const kompetencije = new Set();
+  const interesovanja = new Set();
+  const preporuceneOblasti = new Set();
+
+  const smjer = (student.smjer || "").toLowerCase();
+
+  if (smjer.includes("računar") || smjer.includes("racunar")) {
+    kompetencije.add("Programiranje");
+    kompetencije.add("Rješavanje problema");
+    kompetencije.add("Analitičko razmišljanje");
+    kompetencije.add("Baze podataka");
+    kompetencije.add("Web razvoj");
+    preporuceneOblasti.add("Softverski razvoj");
+    preporuceneOblasti.add("Backend razvoj");
+    preporuceneOblasti.add("Data analiza");
+  }
+
+  if (smjer.includes("matemat")) {
+    kompetencije.add("Matematičko modelovanje");
+    kompetencije.add("Logičko razmišljanje");
+    kompetencije.add("Statistička analiza");
+    preporuceneOblasti.add("Analitika podataka");
+    preporuceneOblasti.add("Finansijska analiza");
+  }
+
+  if (smjer.includes("biolog")) {
+    kompetencije.add("Istraživački rad");
+    kompetencije.add("Analiza podataka");
+    kompetencije.add("Naučna metodologija");
+    preporuceneOblasti.add("Laboratorijski rad");
+    preporuceneOblasti.add("Istraživanje");
+  }
+
+  aktivnosti.forEach((aktivnost) => {
+    const tekst = `${aktivnost.tip || ""} ${aktivnost.naziv || ""} ${aktivnost.opis || ""}`.toLowerCase();
+
+    if (aktivnost.tip === "praksa") {
+      kompetencije.add("Praktično iskustvo");
+      kompetencije.add("Profesionalna odgovornost");
+      interesovanja.add("Praksa i profesionalni razvoj");
+    }
+    if (aktivnost.tip === "radionica") {
+      kompetencije.add("Spremnost na učenje");
+      kompetencije.add("Usavršavanje");
+      interesovanja.add("Edukacija i razvoj vještina");
+    }
+    if (aktivnost.tip === "dogadjaj") {
+      kompetencije.add("Organizacione vještine");
+      kompetencije.add("Komunikacija");
+      interesovanja.add("Događaji i timski rad");
+    }
+    if (aktivnost.tip === "volontiranje") {
+      kompetencije.add("Timski rad");
+      kompetencije.add("Društvena odgovornost");
+      kompetencije.add("Komunikacione vještine");
+      interesovanja.add("Društveni doprinos");
+    }
+    if (tekst.includes("ai") || tekst.includes("vještačka") || tekst.includes("vestacka")) {
+      interesovanja.add("Vještačka inteligencija");
+      preporuceneOblasti.add("AI rješenja");
+    }
+    if (tekst.includes("web")) {
+      interesovanja.add("Web razvoj");
+      preporuceneOblasti.add("Frontend/Backend razvoj");
+    }
+    if (tekst.includes("data") || tekst.includes("podaci")) {
+      interesovanja.add("Analiza podataka");
+      preporuceneOblasti.add("Data Science");
+    }
+    if (tekst.includes("hakaton") || tekst.includes("takmičenje") || tekst.includes("takmicenje")) {
+      kompetencije.add("Rad pod pritiskom");
+      kompetencije.add("Kreativno rješavanje problema");
+      interesovanja.add("Takmičenja i inovacije");
+    }
+    if (tekst.includes("projekat") || tekst.includes("projekt")) {
+      kompetencije.add("Projektni rad");
+      kompetencije.add("Samostalnost u radu");
+    }
+  });
+
+  return {
+    kompetencije: Array.from(kompetencije),
+    interesovanja: Array.from(interesovanja),
+    preporuceneOblasti: Array.from(preporuceneOblasti),
+  };
+}
+
+function generisiProfesionalniZakljucak(student, kompetencije, interesovanja, preporuceneOblasti) {
+  const ime = student.ime;
+  const smjer = student.smjer || "odabrane oblasti";
+
+  const kompetencijeTekst = kompetencije.length > 0 ? kompetencije.slice(0, 4).join(", ") : "odgovornost, spremnost na učenje i profesionalni razvoj";
+  const interesovanjaTekst = interesovanja.length > 0 ? interesovanja.slice(0, 4).join(", ") : "stručno usavršavanje i razvoj karijere";
+  const oblastiTekst = preporuceneOblasti.length > 0 ? preporuceneOblasti.slice(0, 4).join(", ") : "oblasti povezane sa studijskim programom";
+
+  return `${ime} je student smjera ${smjer} koji kroz akademski rad, aktivnosti i dodatna angažovanja pokazuje razvijene kompetencije kao što su ${kompetencijeTekst}. Na osnovu zabilježenih podataka, posebno se ističu interesovanja u oblastima: ${interesovanjaTekst}. Student se preporučuje za oblasti kao što su: ${oblastiTekst}.`;
+}
 
 // ─── OCJENA na osnovu bodova: F<50, E 50-59, D 60-69, C 70-79, B 80-89, A 90-100
 function izracunajOcjenu(bodovi) {
@@ -165,6 +268,48 @@ router.get("/cv-zahtjevi", requireSluzba, async (req, res) => {
 router.put("/cv-zahtjev/:id", requireSluzba, async (req, res) => {
   try {
     const { status } = req.body;
+    const sluzbaId = req.session.user.id;
+
+    // Pronađi zahtjev i provjeri da pripada ovoj sluzbi
+    const [[zahtjev]] = await db.query(
+      `SELECT student_id, studentska_sluzba_id FROM zahtjevi_za_stampanje_cv WHERE id = ?`,
+      [req.params.id]
+    );
+
+    if (!zahtjev || zahtjev.studentska_sluzba_id !== sluzbaId) {
+      return res.status(404).json({
+        success: false,
+        message: "Zahtjev nije pronađen.",
+      });
+    }
+
+    // Ako se zahtjev ODOBRAVA (status -> zavrseno), provjeri da je student
+    // STVARNO položio sve obavezne predmete na koje je upisan (server-side,
+    // ne vjerujemo samo frontend-u/ranijoj provjeri u trenutku slanja zahtjeva)
+    if (status === "zavrseno") {
+      const [[nepolozeni]] = await db.query(
+        `
+        SELECT COUNT(*) AS ukupno
+        FROM upisi_predmeta up
+        JOIN predmeti p ON up.predmet_id = p.id
+        LEFT JOIN rezultati r ON r.predmet_id = p.id
+        LEFT JOIN rezultat_studenta rs
+          ON rs.rezultat_id = r.id AND rs.student_id = up.student_id
+        WHERE up.student_id = ?
+          AND p.obavezan = true
+          AND (rs.bodovi IS NULL OR rs.bodovi < 50)
+        `,
+        [zahtjev.student_id]
+      );
+
+      if (nepolozeni.ukupno > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "STUDENT NIJE POLOŽIO SVE ISPITE",
+          nepolozeni_predmeti: nepolozeni.ukupno,
+        });
+      }
+    }
 
     await db.query(
       `
@@ -187,6 +332,113 @@ router.put("/cv-zahtjev/:id", requireSluzba, async (req, res) => {
       success: false,
       message: "Greška na serveru"
     });
+  }
+});
+
+// ─── PREUZIMANJE PDF-A ODOBRENOG DIGITALNOG CV-A ────────────────────────────
+// Dostupno samo za zahtjeve čiji je status "zavrseno" (odobreno), i samo za
+// zahtjeve koji pripadaju ovoj studentskoj službi.
+router.get("/zahtjev/:id/pdf", requireSluzba, async (req, res) => {
+  try {
+    const sluzbaId = req.session.user.id;
+
+    const [[zahtjev]] = await db.query(
+      `SELECT id, student_id, status FROM zahtjevi_za_stampanje_cv WHERE id = ? AND studentska_sluzba_id = ?`,
+      [req.params.id, sluzbaId]
+    );
+
+    if (!zahtjev) {
+      return res.status(404).json({ success: false, message: "Zahtjev nije pronađen." });
+    }
+
+    if (zahtjev.status !== "zavrseno") {
+      return res.status(400).json({ success: false, message: "Dokument je dostupan samo za odobrene zahtjeve." });
+    }
+
+    const studentId = zahtjev.student_id;
+
+    const [[student]] = await db.query(
+      `
+      SELECT s.id, s.ime, s.prezime, s.studentski_email, s.jedinstveni_id,
+             s.broj_indeksa, s.smjer, s.profesionalni_profil_ai, ss.naziv_fakulteta
+      FROM studenti s
+      JOIN studentske_sluzbe ss ON s.studentska_sluzba_id = ss.id
+      WHERE s.id = ?
+      `,
+      [studentId]
+    );
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student nije pronađen." });
+    }
+
+    const [aktivnosti] = await db.query(
+      `
+      SELECT a.id, a.tip, a.naziv, a.opis, a.datum_aktivnosti, f.naziv_firme
+      FROM aktivnosti_studenata a
+      LEFT JOIN firme f ON a.firma_id = f.id
+      WHERE a.student_id = ?
+      ORDER BY a.datum_aktivnosti DESC
+      `,
+      [studentId]
+    );
+
+    const [istaknutaPostignuca] = await db.query(
+      `
+      SELECT a.id, a.tip, a.naziv, a.opis, a.datum_aktivnosti, f.naziv_firme
+      FROM aktivnosti_studenata a
+      LEFT JOIN firme f ON a.firma_id = f.id
+      WHERE a.student_id = ?
+        AND (
+          a.naziv LIKE '%nagrada%' OR a.naziv LIKE '%takmičenje%' OR a.naziv LIKE '%takmicenje%'
+          OR a.naziv LIKE '%hakaton%' OR a.naziv LIKE '%sertifikat%'
+          OR a.opis LIKE '%nagrada%' OR a.opis LIKE '%takmičenje%' OR a.opis LIKE '%takmicenje%'
+          OR a.opis LIKE '%hakaton%' OR a.opis LIKE '%sertifikat%'
+        )
+      ORDER BY a.datum_aktivnosti DESC
+      `,
+      [studentId]
+    );
+
+    const [[unitrackScore]] = await db.query(
+      `
+      SELECT akademski_bodovi, vannastavne_aktivnosti_bodovi, drustveni_doprinos_bodovi, posebna_postignuca_bodovi, ukupno_bodova
+      FROM bodovi_studenata
+      WHERE student_id = ?
+      `,
+      [studentId]
+    );
+
+    const analiza = generisiKompetencije(student, aktivnosti);
+
+    // Koristi ISTI tekst koji je student vidio (sačuvan kad je prvi put otvorio
+    // svoj Digitalni CV). Ako iz nekog razloga ne postoji (rijedak slučaj -
+    // npr. zahtjev je nekako stigao bez da je student ikad otvorio CV stranicu),
+    // koristi kalup kao rezervu - nikad ne pucamo.
+    const profesionalniZakljucak = student.profesionalni_profil_ai
+      || generisiProfesionalniZakljucak(student, analiza.kompetencije, analiza.interesovanja, analiza.preporuceneOblasti);
+
+    generisiCvPdf(res, {
+      student: {
+        ime: student.ime,
+        prezime: student.prezime,
+        email: student.studentski_email,
+        jedinstveni_id: student.jedinstveni_id,
+        broj_indeksa: student.broj_indeksa,
+        smjer: student.smjer,
+        fakultet: student.naziv_fakulteta,
+      },
+      unitrackScore: unitrackScore || null,
+      kompetencije: analiza.kompetencije,
+      interesovanja: analiza.interesovanja,
+      preporuceneOblasti: analiza.preporuceneOblasti,
+      profesionalniZakljucak,
+      istaknutaPostignuca,
+      aktivnosti,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri generisanju PDF dokumenta." });
   }
 });
 
@@ -288,6 +540,60 @@ router.get("/bodovi/:studentId", requireSluzba, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Greška na serveru"
+    });
+  }
+});
+
+// ─── NOVO: POSEBNA POSTIGNUĆA — pojedinačni unos preko Student ID-a ─────────
+// Dodaje (ne resetuje!) bodove na postojeću posebna_postignuca_bodovi vrijednost.
+// Ostale 3 kategorije (akademski/vannastavne/drustveni) ostaju netaknute.
+router.post("/posebna-postignuca", requireSluzba, async (req, res) => {
+  try {
+    const sluzbaId = req.session.user.id;
+    const { jedinstveni_id, bodovi } = req.body;
+
+    if (!jedinstveni_id || bodovi === undefined || bodovi === null || bodovi === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Jedinstveni ID studenta i bodovi su obavezni.",
+      });
+    }
+
+    const [[student]] = await db.query(
+      "SELECT id, ime, prezime FROM studenti WHERE jedinstveni_id = ? AND studentska_sluzba_id = ?",
+      [jedinstveni_id, sluzbaId]
+    );
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: `Student sa ID-om "${jedinstveni_id}" nije pronađen.`,
+      });
+    }
+
+    const dodatniBodovi = Number(bodovi) || 0;
+
+    // Osiguraj da red postoji (sa default 0 vrijednostima) pa onda dodaj
+    await db.query(
+      "INSERT IGNORE INTO bodovi_studenata (student_id) VALUES (?)",
+      [student.id]
+    );
+
+    await db.query(
+      "UPDATE bodovi_studenata SET posebna_postignuca_bodovi = posebna_postignuca_bodovi + ? WHERE student_id = ?",
+      [dodatniBodovi, student.id]
+    );
+
+    res.json({
+      success: true,
+      message: `Dodato ${dodatniBodovi} bodova za posebna postignuća — ${student.ime} ${student.prezime}.`,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Greška pri unosu posebnih postignuća.",
     });
   }
 });
@@ -711,7 +1017,7 @@ router.get("/predmeti", requireSluzba, async (req, res) => {
 
     const [predmeti] = await db.query(
       `
-      SELECT id, naziv, sifra_predmeta, semestar, godina_studija, espb, obavezan
+      SELECT id, naziv, smjer, sifra_predmeta, semestar, godina_studija, espb, obavezan
       FROM predmeti
       WHERE studentska_sluzba_id = ?
       ORDER BY godina_studija ASC, semestar ASC, naziv ASC
@@ -736,7 +1042,7 @@ router.get("/predmeti", requireSluzba, async (req, res) => {
 router.post("/predmeti", requireSluzba, async (req, res) => {
   try {
     const sluzbaId = req.session.user.id;
-    const { naziv, sifra_predmeta, semestar, godina_studija, espb, obavezan } = req.body;
+    const { naziv, smjer, sifra_predmeta, semestar, godina_studija, espb, obavezan } = req.body;
 
     if (!naziv || !semestar || !godina_studija) {
       return res.status(400).json({
@@ -748,10 +1054,10 @@ router.post("/predmeti", requireSluzba, async (req, res) => {
     await db.query(
       `
       INSERT INTO predmeti
-      (studentska_sluzba_id, naziv, sifra_predmeta, semestar, godina_studija, espb, obavezan)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      (studentska_sluzba_id, naziv, smjer, sifra_predmeta, semestar, godina_studija, espb, obavezan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
-      [sluzbaId, naziv, sifra_predmeta || null, semestar, godina_studija, espb || 0, obavezan ? 1 : 0]
+      [sluzbaId, naziv, smjer || null, sifra_predmeta || null, semestar, godina_studija, espb || 0, obavezan ? 1 : 0]
     );
 
     res.json({
