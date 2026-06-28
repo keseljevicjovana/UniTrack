@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
+const bcrypt = require("bcrypt");
 
 const multer = require("multer");
 const xlsx = require("xlsx");
@@ -644,5 +645,66 @@ router.post(
     }
   }
 );
+
+// ─── PODEŠAVANJA — podaci o nalogu + promjena lozinke ───────────────────────
+router.get("/settings", requireFirma, async (req, res) => {
+  try {
+    const firmaId = req.session.user.id;
+
+    const [[firma]] = await db.query(
+      `SELECT id, naziv_firme, email, pib, adresa, opis FROM firme WHERE id = ?`,
+      [firmaId]
+    );
+
+    if (!firma) {
+      return res.status(404).json({ success: false, message: "Firma nije pronađena." });
+    }
+
+    res.json({ success: true, firma });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri učitavanju podešavanja." });
+  }
+});
+
+router.put("/settings/password", requireFirma, async (req, res) => {
+  try {
+    const firmaId = req.session.user.id;
+    const { staraLozinka, novaLozinka, potvrdaLozinke } = req.body;
+
+    if (!staraLozinka || !novaLozinka || !potvrdaLozinke) {
+      return res.status(400).json({ success: false, message: "Sva polja su obavezna." });
+    }
+
+    if (novaLozinka !== potvrdaLozinke) {
+      return res.status(400).json({ success: false, message: "Nova lozinka i potvrda lozinke se ne poklapaju." });
+    }
+
+    if (novaLozinka.length < 6) {
+      return res.status(400).json({ success: false, message: "Nova lozinka mora imati najmanje 6 karaktera." });
+    }
+
+    const [[firma]] = await db.query(`SELECT id, lozinka FROM firme WHERE id = ?`, [firmaId]);
+
+    if (!firma) {
+      return res.status(404).json({ success: false, message: "Firma nije pronađena." });
+    }
+
+    const ispravnaStaraLozinka = await bcrypt.compare(staraLozinka, firma.lozinka);
+
+    if (!ispravnaStaraLozinka) {
+      return res.status(400).json({ success: false, message: "Stara lozinka nije tačna." });
+    }
+
+    const hashedPassword = await bcrypt.hash(novaLozinka, 10);
+
+    await db.query(`UPDATE firme SET lozinka = ? WHERE id = ?`, [hashedPassword, firmaId]);
+
+    res.json({ success: true, message: "Lozinka je uspješno promijenjena." });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri promjeni lozinke." });
+  }
+});
 
 module.exports = router;

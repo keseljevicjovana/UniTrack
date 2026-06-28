@@ -894,4 +894,52 @@ router.post("/konkursi/:id/prijava", requireStudent, async (req, res) => {
   }
 });
 
+// ─── VAUČERI — osvojeni (istorija) + struktura nagrada za trenutni mjesec ──
+router.get("/vauceri", requireStudent, async (req, res) => {
+  try {
+    const studentId = req.session.user.id;
+
+    const [[student]] = await db.query(
+      "SELECT studentska_sluzba_id FROM studenti WHERE id = ?",
+      [studentId]
+    );
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student nije pronađen." });
+    }
+
+    const sada = new Date();
+    const mjesec = sada.getMonth() + 1;
+    const godina = sada.getFullYear();
+
+    // Vaučeri koje je OVAJ student stvarno osvojio (bilo kad)
+    const [osvojeni] = await db.query(
+      `
+      SELECT v.id, v.naziv_partnera, v.opis, v.procenat_popusta, v.pozicija, v.mjesec, v.godina, v.datum_isteka, d.datum_dodjele
+      FROM vauceri_dobitnici d
+      JOIN vauceri v ON d.vaucer_id = v.id
+      WHERE d.student_id = ?
+      ORDER BY v.godina DESC, v.mjesec DESC
+      `,
+      [studentId]
+    );
+
+    // Struktura nagrada (1./2./3. mjesto) za trenutni mjesec, na fakultetu studenta
+    const [trenutneNagrade] = await db.query(
+      `
+      SELECT id, naziv_partnera, opis, procenat_popusta, pozicija, mjesec, godina, datum_isteka
+      FROM vauceri
+      WHERE studentska_sluzba_id = ? AND mjesec = ? AND godina = ?
+      ORDER BY pozicija ASC
+      `,
+      [student.studentska_sluzba_id, mjesec, godina]
+    );
+
+    res.json({ success: true, osvojeni, trenutneNagrade });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri učitavanju vaučera." });
+  }
+});
+
 module.exports = router;
