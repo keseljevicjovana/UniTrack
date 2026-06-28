@@ -395,3 +395,132 @@ WHERE predmet_id IS NULL
     SELECT 1 FROM rezultat_studenta rs WHERE rs.rezultat_id = rezultati.id
   );
   
+  
+  
+  
+  
+  
+  
+  
+  
+  -- Pokazuje SVAKI obavezni predmet na koji je Marko upisan, i da li ga je polozio.
+-- Predmeti sa "NIJE POLOŽEN" su razlog 403 greske.
+
+SELECT
+  p.naziv AS predmet,
+  p.obavezan,
+  rs.bodovi,
+  CASE
+    WHEN rs.bodovi IS NULL THEN 'NEMA OCJENU - NIJE POLOŽEN'
+    WHEN rs.bodovi < 50 THEN 'PAO - NIJE POLOŽEN'
+    ELSE 'POLOŽEN'
+  END AS status
+FROM upisi_predmeta up
+JOIN predmeti p ON up.predmet_id = p.id
+JOIN studenti s ON up.student_id = s.id
+LEFT JOIN rezultati r ON r.predmet_id = p.id
+LEFT JOIN rezultat_studenta rs ON rs.rezultat_id = r.id AND rs.student_id = up.student_id
+WHERE s.jedinstveni_id = 'PMF001'
+  AND p.obavezan = 1
+ORDER BY status DESC;
+
+
+
+use unitrack
+
+-- 1. Da li postoji vise od jednog "Operativni sistemi" predmeta?
+SELECT id, naziv, smjer, studentska_sluzba_id
+FROM predmeti
+WHERE naziv = 'Operativni sistemi';
+
+-- 2. Na koji TAČNO predmet_id je Marko upisan (upisi_predmeta)?
+SELECT up.id, up.student_id, up.predmet_id, p.naziv, p.smjer
+FROM upisi_predmeta up
+JOIN predmeti p ON up.predmet_id = p.id
+JOIN studenti s ON up.student_id = s.id
+WHERE s.jedinstveni_id = 'PMF001' AND p.naziv = 'Operativni sistemi';
+
+
+
+UPDATE rezultati SET predmet_id = 22 WHERE id = 10;
+
+
+
+USE unitrack;
+
+ALTER TABLE studenti
+ADD COLUMN profesionalni_profil_ai TEXT NULL AFTER smjer;
+  
+
+UPDATE studenti SET profesionalni_profil_ai = NULL WHERE jedinstveni_id = 'PMF001';
+  
+  
+  
+  
+USE unitrack;
+
+-- Predmet moze pripadati VISE smjerova (npr. "Analiza 1" je i na Matematici i na
+-- Matematici i racunarskim naukama) - jedan red u "predmeti", vise redova ovdje.
+CREATE TABLE IF NOT EXISTS predmet_smjerovi (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    predmet_id INT NOT NULL,
+    smjer VARCHAR(150) NOT NULL,
+    UNIQUE KEY uniq_predmet_smjer (predmet_id, smjer),
+    FOREIGN KEY (predmet_id) REFERENCES predmeti(id) ON DELETE CASCADE
+);
+  
+  
+  
+USE unitrack;
+
+-- Vauceri - admin ih kreira, vezani su za konkretan fakultet (studentska_sluzba),
+-- mjesec i godinu. Studenti vide samo vaucere svog fakulteta za trenutni mjesec.
+CREATE TABLE IF NOT EXISTS vauceri (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    studentska_sluzba_id INT NOT NULL,
+    naziv_partnera VARCHAR(150) NOT NULL,
+    opis TEXT,
+    procenat_popusta INT NOT NULL,
+    mjesec INT NOT NULL,
+    godina INT NOT NULL,
+    datum_isteka DATE,
+    datum_kreiranja TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (studentska_sluzba_id)
+        REFERENCES studentske_sluzbe(id)
+        ON DELETE CASCADE
+);
+  
+  
+  
+  
+  
+
+
+
+USE unitrack;
+
+-- Pozicija (1, 2 ili 3 mjesto) za koju vazi ovaj vaucer u datom mjesecu
+ALTER TABLE vauceri
+ADD COLUMN pozicija INT NULL AFTER procenat_popusta;
+
+-- Ko je STVARNO osvojio koji vaucer (admin dodjeljuje, nakon zatvaranja mjeseca)
+CREATE TABLE IF NOT EXISTS vauceri_dobitnici (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vaucer_id INT NOT NULL,
+    student_id INT NOT NULL,
+    datum_dodjele TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uniq_dobitnik (vaucer_id, student_id),
+
+    FOREIGN KEY (vaucer_id) REFERENCES vauceri(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES studenti(id) ON DELETE CASCADE
+);
+
+
+
+
+
+
+
+
