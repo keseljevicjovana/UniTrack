@@ -14,6 +14,7 @@ const IcoBuilding = () => <svg className="w-[18px] h-[18px]" fill="none" stroke=
 const IcoSchool   = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"/></svg>;
 const IcoTrophy   = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>;
 const IcoSettings = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>;
+const IcoTicket   = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/></svg>;
 const IcoPlus     = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>;
 const IcoChart    = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>;
 
@@ -23,6 +24,7 @@ const NAV = [
   { id: "firme",    label: "Firme",              Icon: IcoBuilding },
   { id: "sluzbe",   label: "Studentske službe",  Icon: IcoSchool   },
   { id: "rang",     label: "Rang lista",         Icon: IcoTrophy   },
+  { id: "vauceri",  label: "Vaučeri",            Icon: IcoTicket   },
   { id: "settings", label: "Podešavanja",        Icon: IcoSettings },
 ];
 
@@ -99,12 +101,20 @@ const AdminDashboard = () => {
   const [sluzbaModal, setSluzbaModal] = useState(false);
   const [confirm, setConfirm]         = useState({ open: false, item: null, type: "" });
 
-  const [firmaForm,  setFirmaForm]  = useState({ naziv_firme: "", email: "", lozinka: "", pib: "", adresa: "", opis: "" });
-  const [sluzbaForm, setSluzbaForm] = useState({ naziv_fakulteta: "", email: "", lozinka: "" });
+  const [firmaForm,  setFirmaForm]  = useState({ naziv_firme: "", email: "", pib: "", adresa: "", opis: "" });
+  const [sluzbaForm, setSluzbaForm] = useState({ naziv_fakulteta: "", email: "" });
 
   // Rang lista
   const [rangLista, setRangLista] = useState([]);
   const [rangListaLoaded, setRangListaLoaded] = useState(false);
+
+  // Vaučeri
+  const [vauceri, setVauceri] = useState([]);
+  const [vauceriLoaded, setVauceriLoaded] = useState(false);
+  const [vaucerModal, setVaucerModal] = useState(false);
+  const [vaucerForm, setVaucerForm] = useState({ studentska_sluzba_id: "", naziv_partnera: "", opis: "", procenat_popusta: "", pozicija: "", mjesec: new Date().getMonth() + 1, godina: new Date().getFullYear(), datum_isteka: "" });
+  const [dobitnikInput, setDobitnikInput] = useState({});
+  const [confirmVaucer, setConfirmVaucer] = useState({ open: false, item: null });
 
   // Podešavanja — promjena lozinke
   const [passwordForm, setPasswordForm] = useState({ staraLozinka: "", novaLozinka: "", potvrdaLozinke: "" });
@@ -144,6 +154,72 @@ const AdminDashboard = () => {
     if (tab === "rang" && !rangListaLoaded) fetchRangLista();
   }, [tab, rangListaLoaded, fetchRangLista]);
 
+  // ─── Vaučeri ──────────────────────────────────────────────────────────────
+  const fetchVauceri = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/vauceri");
+      if (res.data.success) {
+        setVauceri(res.data.vauceri);
+        setVauceriLoaded(true);
+      }
+    } catch {
+      showAlert("Greška pri učitavanju vaučera.", "error");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "vauceri" && !vauceriLoaded) fetchVauceri();
+  }, [tab, vauceriLoaded, fetchVauceri]);
+
+  const dodajVaucer = async () => {
+    if (!vaucerForm.studentska_sluzba_id || !vaucerForm.naziv_partnera) {
+      showAlert("Fakultet i naziv partnera su obavezni.", "error"); return;
+    }
+    try {
+      const res = await api.post("/admin/vauceri", vaucerForm);
+      if (res.data.success) {
+        setVaucerModal(false);
+        setVaucerForm({ studentska_sluzba_id: "", naziv_partnera: "", opis: "", procenat_popusta: "", pozicija: "", mjesec: new Date().getMonth() + 1, godina: new Date().getFullYear(), datum_isteka: "" });
+        showAlert("Vaučer je uspješno dodat!");
+        setVauceriLoaded(false);
+      } else showAlert(res.data.message || "Greška.", "error");
+    } catch { showAlert("Greška pri dodavanju vaučera.", "error"); }
+  };
+
+  const dodijeliPobjednika = async (vaucerId) => {
+    const jedinstveniId = dobitnikInput[vaucerId];
+    if (!jedinstveniId) { showAlert("Unesi jedinstveni ID studenta.", "error"); return; }
+    try {
+      const res = await api.post(`/admin/vauceri/${vaucerId}/dobitnik`, { jedinstveni_id: jedinstveniId });
+      if (res.data.success) {
+        showAlert(res.data.message);
+        setDobitnikInput({ ...dobitnikInput, [vaucerId]: "" });
+        setVauceriLoaded(false);
+      } else showAlert(res.data.message || "Greška.", "error");
+    } catch (err) { showAlert(err.response?.data?.message || "Greška pri dodjeli pobjednika.", "error"); }
+  };
+
+  const ukloniPobjednika = async (vaucerId) => {
+    try {
+      const res = await api.delete(`/admin/vauceri/${vaucerId}/dobitnik`);
+      if (res.data.success) {
+        showAlert("Dobitnik je uklonjen.");
+        setVauceriLoaded(false);
+      } else showAlert(res.data.message || "Greška.", "error");
+    } catch { showAlert("Greška pri uklanjanju dobitnika.", "error"); }
+  };
+
+  const obrisiVaucer = async () => {
+    try {
+      const res = await api.delete(`/admin/vauceri/${confirmVaucer.item.id}`);
+      if (res.data.success) {
+        setConfirmVaucer({ open: false, item: null });
+        showAlert("Vaučer je uspješno obrisan.");
+        setVauceriLoaded(false);
+      } else showAlert(res.data.message || "Greška.", "error");
+    } catch { showAlert("Greška pri brisanju vaučera.", "error"); }
+  };
+
   // ─── Podešavanja — promjena lozinke ──────────────────────────────────────────
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -159,29 +235,29 @@ const AdminDashboard = () => {
   };
 
   const dodajFirmu = async () => {
-    if (!firmaForm.naziv_firme || !firmaForm.email || !firmaForm.lozinka) {
-      showAlert("Naziv, email i lozinka su obavezni.", "error"); return;
+    if (!firmaForm.naziv_firme || !firmaForm.email) {
+      showAlert("Naziv i email su obavezni.", "error"); return;
     }
     try {
       const res = await api.post("/admin/firme", firmaForm);
       if (res.data.success) {
         setFirmaModal(false);
-        setFirmaForm({ naziv_firme: "", email: "", lozinka: "", pib: "", adresa: "", opis: "" });
-        showAlert("Firma je uspješno dodata!"); fetchData();
+        setFirmaForm({ naziv_firme: "", email: "", pib: "", adresa: "", opis: "" });
+        showAlert(res.data.message || "Firma je uspješno dodata!"); fetchData();
       } else showAlert(res.data.message || "Greška.", "error");
     } catch { showAlert("Greška pri dodavanju firme.", "error"); }
   };
 
   const dodajSluzbu = async () => {
-    if (!sluzbaForm.naziv_fakulteta || !sluzbaForm.email || !sluzbaForm.lozinka) {
+    if (!sluzbaForm.naziv_fakulteta || !sluzbaForm.email) {
       showAlert("Sva polja su obavezna.", "error"); return;
     }
     try {
       const res = await api.post("/admin/studentske-sluzbe", sluzbaForm);
       if (res.data.success) {
         setSluzbaModal(false);
-        setSluzbaForm({ naziv_fakulteta: "", email: "", lozinka: "" });
-        showAlert("Studentska služba je uspješno dodata!"); fetchData();
+        setSluzbaForm({ naziv_fakulteta: "", email: "" });
+        showAlert(res.data.message || "Studentska služba je uspješno dodata!"); fetchData();
       } else showAlert(res.data.message || "Greška.", "error");
     } catch { showAlert("Greška pri dodavanju službe.", "error"); }
   };
@@ -442,6 +518,85 @@ const AdminDashboard = () => {
                 </Section>
               )}
 
+              {tab === "vauceri" && (
+                <Section
+                  title="Vaučeri za studente"
+                  count={`${vauceri.length} vaučera`}
+                  action={
+                    <button
+                      onClick={() => setVaucerModal(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-white text-[12.5px] font-semibold rounded-xl transition-colors hover:opacity-90"
+                      style={{ background: "#A0784A" }}
+                    >
+                      <IcoPlus /> Dodaj vaučer
+                    </button>
+                  }
+                >
+                  {!vauceriLoaded ? <Spinner /> : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-[#F2EBE1] text-[12px] font-bold text-[#5C4033]">
+                            <th className="px-6 py-3">Mjesto</th>
+                            <th className="px-6 py-3">Partner / Nagrada</th>
+                            <th className="px-6 py-3">Fakultet</th>
+                            <th className="px-6 py-3">Mjesec/Godina</th>
+                            <th className="px-6 py-3">Dobitnik</th>
+                            <th className="px-6 py-3">Akcije</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#EDE5DA] text-[13px]">
+                          {vauceri.length === 0 ? (
+                            <tr><td colSpan="6" className="px-6 py-10 text-center text-[#8B7355]">Nema unesenih vaučera.</td></tr>
+                          ) : vauceri.map((v) => (
+                            <tr key={v.id} className="hover:bg-[#FAF7F3]">
+                              <td className="px-6 py-3.5">
+                                {v.pozicija ? (
+                                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F5EFE7] text-[#6B4C2A]">{v.pozicija}. mjesto</span>
+                                ) : "—"}
+                              </td>
+                              <td className="px-6 py-3.5">
+                                <p className="font-semibold text-[#2C1A0E]">{v.naziv_partnera}{v.procenat_popusta ? ` — ${v.procenat_popusta}%` : ""}</p>
+                                {v.opis && <p className="text-[11.5px] text-[#8B7355] mt-0.5 max-w-[280px]">{v.opis}</p>}
+                              </td>
+                              <td className="px-6 py-3.5 text-[#8B7355]">{v.naziv_fakulteta}</td>
+                              <td className="px-6 py-3.5 text-[#8B7355]">{v.mjesec}/{v.godina}</td>
+                              <td className="px-6 py-3.5">
+                                {v.dobitnik_id ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[12px] font-semibold text-[#2C1A0E]">{v.dobitnik_ime} {v.dobitnik_prezime} ({v.dobitnik_jedinstveni_id})</span>
+                                    <button onClick={() => ukloniPobjednika(v.id)} className="text-[11px] text-red-500 hover:underline">ukloni</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="text"
+                                      placeholder="jedinstveni ID"
+                                      value={dobitnikInput[v.id] || ""}
+                                      onChange={(e) => setDobitnikInput({ ...dobitnikInput, [v.id]: e.target.value })}
+                                      className="w-[110px] px-2 py-1 border border-[#DDD0BE] rounded-lg text-[12px] outline-none focus:border-[#A0784A]"
+                                    />
+                                    <button onClick={() => dodijeliPobjednika(v.id)} className="text-[11px] font-semibold text-[#A0784A] hover:underline">Dodijeli</button>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-3.5">
+                                <button
+                                  onClick={() => setConfirmVaucer({ open: true, item: v })}
+                                  className="text-[12px] font-semibold text-red-500 hover:underline"
+                                >
+                                  Obriši
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Section>
+              )}
+
               {tab === "settings" && (
                 <div>
                   <div className="mb-7">
@@ -504,7 +659,7 @@ const AdminDashboard = () => {
       <Modal open={firmaModal} onClose={() => setFirmaModal(false)} title="Dodaj firmu" subtitle="Kreiraj nalog za novu partnersku firmu">
         <FormInput label="Naziv firme"  required placeholder="npr. Mtel d.o.o."         value={firmaForm.naziv_firme} onChange={(e) => setFirmaForm({ ...firmaForm, naziv_firme: e.target.value })} />
         <FormInput label="Email"        required type="email" placeholder="firma@email.com" value={firmaForm.email} onChange={(e) => setFirmaForm({ ...firmaForm, email: e.target.value })} />
-        <FormInput label="Lozinka"      required type="password" placeholder="Min. 8 karaktera" value={firmaForm.lozinka} onChange={(e) => setFirmaForm({ ...firmaForm, lozinka: e.target.value })} />
+        <p className="text-[11.5px] text-[#8B7355] -mt-1 mb-3">Lozinka se automatski generiše i šalje na ovaj email.</p>
         <FormInput label="PIB"          placeholder="Poreski identifikacioni broj"       value={firmaForm.pib}    onChange={(e) => setFirmaForm({ ...firmaForm, pib: e.target.value })} />
         <FormInput label="Adresa"       placeholder="Ulica i broj, grad"                 value={firmaForm.adresa} onChange={(e) => setFirmaForm({ ...firmaForm, adresa: e.target.value })} />
         <FormInput label="Opis"         placeholder="Kratki opis firme..." as="textarea"  value={firmaForm.opis}   onChange={(e) => setFirmaForm({ ...firmaForm, opis: e.target.value })} />
@@ -520,7 +675,7 @@ const AdminDashboard = () => {
       <Modal open={sluzbaModal} onClose={() => setSluzbaModal(false)} title="Dodaj studentsku službu" subtitle="Kreiraj nalog za fakultetsku studentsku službu">
         <FormInput label="Naziv fakulteta" required placeholder="npr. Elektrotehnički fakultet" value={sluzbaForm.naziv_fakulteta} onChange={(e) => setSluzbaForm({ ...sluzbaForm, naziv_fakulteta: e.target.value })} />
         <FormInput label="Email"           required type="email" placeholder="sluzba@ucg.ac.me"  value={sluzbaForm.email}          onChange={(e) => setSluzbaForm({ ...sluzbaForm, email: e.target.value })} />
-        <FormInput label="Lozinka"         required type="password" placeholder="Min. 8 karaktera" value={sluzbaForm.lozinka}     onChange={(e) => setSluzbaForm({ ...sluzbaForm, lozinka: e.target.value })} />
+        <p className="text-[11.5px] text-[#8B7355] -mt-1 mb-3">Lozinka se automatski generiše i šalje na ovaj email.</p>
         <div className="flex gap-3 justify-end mt-6">
           <button onClick={() => setSluzbaModal(false)} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-[#F5EFE7] text-[#8B7355] border border-[#DDD0BE] hover:bg-[#EDE3D6] transition-colors">Otkaži</button>
           <button onClick={dodajSluzbu} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-colors hover:opacity-90" style={{ background: "#A0784A" }}>
@@ -535,6 +690,57 @@ const AdminDashboard = () => {
         onClose={() => setConfirm({ open: false, item: null, type: "" })}
         onConfirm={handleDelete}
         name={confirm.item?.naziv_firme || confirm.item?.naziv_fakulteta || ""}
+      />
+
+      <Modal open={vaucerModal} onClose={() => setVaucerModal(false)} title="Dodaj vaučer" subtitle="Kreiraj novi vaučer za studente jednog fakulteta">
+        <div className="mb-4">
+          <label className="block text-xs font-semibold tracking-wider uppercase text-[#8B7355] mb-1.5">Fakultet</label>
+          <select
+            value={vaucerForm.studentska_sluzba_id}
+            onChange={(e) => setVaucerForm({ ...vaucerForm, studentska_sluzba_id: e.target.value })}
+            className="w-full px-4 py-2.5 border border-[#DDD0BE] rounded-xl text-sm text-[#2C1A0E] bg-[#F5EFE7] focus:outline-none focus:border-[#6B4C2A] focus:bg-white transition-colors"
+          >
+            <option value="">— Izaberi fakultet —</option>
+            {data?.studentskeSluzbe?.map((s) => <option key={s.id} value={s.id}>{s.naziv_fakulteta}</option>)}
+          </select>
+        </div>
+        <FormInput label="Naziv partnera" required placeholder="npr. FitZone Teretana" value={vaucerForm.naziv_partnera} onChange={(e) => setVaucerForm({ ...vaucerForm, naziv_partnera: e.target.value })} />
+        <FormInput label="Opis / nagrada (puni opis - npr. ako nije procenat, npr. karte za bioskop)" placeholder="Kratki opis ponude..." as="textarea" value={vaucerForm.opis} onChange={(e) => setVaucerForm({ ...vaucerForm, opis: e.target.value })} />
+        <div className="grid grid-cols-2 gap-3">
+          <FormInput label="Procenat popusta (opciono)" type="number" placeholder="npr. 20" value={vaucerForm.procenat_popusta} onChange={(e) => setVaucerForm({ ...vaucerForm, procenat_popusta: e.target.value })} />
+          <div className="mb-4">
+            <label className="block text-xs font-semibold tracking-wider uppercase text-[#8B7355] mb-1.5">Mjesto (opciono)</label>
+            <select
+              value={vaucerForm.pozicija}
+              onChange={(e) => setVaucerForm({ ...vaucerForm, pozicija: e.target.value })}
+              className="w-full px-4 py-2.5 border border-[#DDD0BE] rounded-xl text-sm text-[#2C1A0E] bg-[#F5EFE7] focus:outline-none focus:border-[#6B4C2A] focus:bg-white transition-colors"
+            >
+              <option value="">— Bez mjesta —</option>
+              <option value="1">1. mjesto</option>
+              <option value="2">2. mjesto</option>
+              <option value="3">3. mjesto</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <FormInput label="Mjesec (1-12)" required type="number" value={vaucerForm.mjesec} onChange={(e) => setVaucerForm({ ...vaucerForm, mjesec: e.target.value })} />
+          <FormInput label="Godina" required type="number" value={vaucerForm.godina} onChange={(e) => setVaucerForm({ ...vaucerForm, godina: e.target.value })} />
+        </div>
+        <FormInput label="Datum isteka (opciono)" type="date" value={vaucerForm.datum_isteka} onChange={(e) => setVaucerForm({ ...vaucerForm, datum_isteka: e.target.value })} />
+        <div className="flex gap-3 justify-end mt-6">
+          <button onClick={() => setVaucerModal(false)} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-[#F5EFE7] text-[#8B7355] border border-[#DDD0BE] hover:bg-[#EDE3D6] transition-colors">Otkaži</button>
+          <button onClick={dodajVaucer} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-colors hover:opacity-90" style={{ background: "#A0784A" }}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+            Sačuvaj
+          </button>
+        </div>
+      </Modal>
+
+      <ConfirmModal
+        open={confirmVaucer.open}
+        onClose={() => setConfirmVaucer({ open: false, item: null })}
+        onConfirm={obrisiVaucer}
+        name={confirmVaucer.item?.naziv_partnera || ""}
       />
     </div>
   );

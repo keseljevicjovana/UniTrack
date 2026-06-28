@@ -97,15 +97,17 @@ const SluzbaDashboard = () => {
   const [filterProsjekMin, setFilterProsjekMin] = useState("");
   const [filterProsjekMax, setFilterProsjekMax] = useState("");
 
-  const [bodoviModal, setBodoviModal]     = useState(false);
-  const [bodoviStudent, setBodoviStudent] = useState(null);
-  const [bodoviLoading, setBodoviLoading] = useState(false);
-  const [bodoviForm, setBodoviForm] = useState({
-    akademski_bodovi: "",
-    vannastavne_aktivnosti_bodovi: "",
-    drustveni_doprinos_bodovi: "",
-    posebna_postignuca_bodovi: "",
-  });
+  const [ocjenePregledModal, setOcjenePregledModal] = useState(false);
+
+  // Posebna postignuća — slijepi unos preko ID-a, ne prikazuje druge kategorije
+  const [posebnaModal, setPosebnaModal] = useState(false);
+  const [posebnaForm, setPosebnaForm] = useState({ jedinstveni_id: "", bodovi: "" });
+  const [posebnaLoading, setPosebnaLoading] = useState(false);
+  const [ocjenePregledStudent, setOcjenePregledStudent] = useState(null);
+  const [ocjenePregledLista, setOcjenePregledLista] = useState([]);
+  const [ocjenePregledLoading, setOcjenePregledLoading] = useState(false);
+
+  const [novStudentModal, setNovStudentModal] = useState(false);
 
   const [passwordForm, setPasswordForm] = useState({ staraLozinka: "", novaLozinka: "", potvrdaLozinke: "" });
 
@@ -116,10 +118,6 @@ const SluzbaDashboard = () => {
   // Unos ocjena (komponente bodova po predmetu)
   const [ocjeneForm, setOcjeneForm] = useState({ predmet_id: "", tip_boda: "prisustvo", opis: "" });
 
-  // Posebna postignuća — modal sa Student ID poljem (kao kod Firme/Aktivnosti)
-  const [posebnaModal, setPosebnaModal] = useState(false);
-  const [posebnaForm, setPosebnaForm] = useState({ jedinstveni_id: "", bodovi: "" });
-  const [posebnaLoading, setPosebnaLoading] = useState(false);
   const [ocjeneFile, setOcjeneFile] = useState(null);
   const [ocjeneLoading, setOcjeneLoading] = useState(false);
   const [ocjeneRezultat, setOcjeneRezultat] = useState(null);
@@ -129,7 +127,7 @@ const SluzbaDashboard = () => {
   // Predmeti
   const [predmeti, setPredmeti] = useState([]);
   const [predmetiLoaded, setPredmetiLoaded] = useState(false);
-  const [predmetForm, setPredmetForm] = useState({ naziv: "", smjer: "", sifra_predmeta: "", semestar: 1, godina_studija: 1, espb: 6, obavezan: true });
+  const [predmetForm, setPredmetForm] = useState({ naziv: "", smjerovi: [], sifra_predmeta: "", semestar: 1, godina_studija: 1, espb: 6, obavezan: true });
   const [predmetSaving, setPredmetSaving] = useState(false);
 
   // Upisni period (status)
@@ -141,9 +139,14 @@ const SluzbaDashboard = () => {
   const [upisOdabraniStudent, setUpisOdabraniStudent] = useState(null);
   const [upisNoviStudentMode, setUpisNoviStudentMode] = useState(false);
   const [noviStudentForm, setNoviStudentForm] = useState({
-    ime: "", prezime: "", jmbg: "", jedinstveni_id: "",
-    studentski_email: "", lozinka: "", broj_indeksa: "", smjer: "",
+    ime: "", prezime: "", jmbg: "",
+    studentski_email: "", broj_indeksa: "", smjer: "",
   });
+  const [noviStudentPodaci, setNoviStudentPodaci] = useState(null);
+
+  const [detaljiModal, setDetaljiModal] = useState(false);
+  const [detaljiStudent, setDetaljiStudent] = useState(null);
+
   const [upisGodinaStudija, setUpisGodinaStudija] = useState(1);
   const [upisOdabraniPredmeti, setUpisOdabraniPredmeti] = useState([]);
   const [upisSaving, setUpisSaving] = useState(false);
@@ -189,7 +192,7 @@ const SluzbaDashboard = () => {
 
   const filtriraniPredmeti = useMemo(() => {
     if (!filterSmjerPredmeti) return predmeti;
-    return predmeti.filter((p) => p.smjer === filterSmjerPredmeti);
+    return predmeti.filter((p) => (p.smjerovi || "").split(", ").includes(filterSmjerPredmeti));
   }, [predmeti, filterSmjerPredmeti]);
 
   // ─── Filtrirani studenti — brza pretraga + napredni filteri kombinovano ────
@@ -312,7 +315,7 @@ const SluzbaDashboard = () => {
       const res = await api.post("/sluzba/predmeti", predmetForm);
       if (res.data.success) {
         showAlert(res.data.message);
-        setPredmetForm({ naziv: "", sifra_predmeta: "", semestar: 1, godina_studija: 1, espb: 6, obavezan: true });
+        setPredmetForm({ naziv: "", smjerovi: [], sifra_predmeta: "", semestar: 1, godina_studija: 1, espb: 6, obavezan: true });
         setPredmetiLoaded(false);
         fetchPredmeti();
       } else showAlert(res.data.message || "Greška.", "error");
@@ -386,41 +389,20 @@ const SluzbaDashboard = () => {
     }
   };
 
-  const otvoriBodoviModal = async (student) => {
-    setBodoviStudent(student);
-    setBodoviModal(true);
-    setBodoviLoading(true);
-    setBodoviForm({ akademski_bodovi: "", vannastavne_aktivnosti_bodovi: "", drustveni_doprinos_bodovi: "", posebna_postignuca_bodovi: "" });
+  const otvoriOcjenePregled = async (student) => {
+    setOcjenePregledStudent(student);
+    setOcjenePregledModal(true);
+    setOcjenePregledLoading(true);
+    setOcjenePregledLista([]);
     try {
-      const res = await api.get(`/sluzba/bodovi/${student.id}`);
-      if (res.data.success && res.data.bodovi) {
-        const b = res.data.bodovi;
-        setBodoviForm({
-          akademski_bodovi: b.akademski_bodovi ?? "",
-          vannastavne_aktivnosti_bodovi: b.vannastavne_aktivnosti_bodovi ?? "",
-          drustveni_doprinos_bodovi: b.drustveni_doprinos_bodovi ?? "",
-          posebna_postignuca_bodovi: b.posebna_postignuca_bodovi ?? "",
-        });
+      const res = await api.get(`/sluzba/studenti/${student.id}/ocjene`);
+      if (res.data.success) {
+        setOcjenePregledLista(res.data.ocjene);
       }
     } catch {
-      showAlert("Greška pri učitavanju postojećih bodova.", "error");
+      showAlert("Greška pri učitavanju ocjena.", "error");
     } finally {
-      setBodoviLoading(false);
-    }
-  };
-
-  const sacuvajBodove = async () => {
-    try {
-      const res = await api.post("/sluzba/bodovi", {
-        student_id: bodoviStudent.id,
-        ...bodoviForm,
-      });
-      if (res.data.success) {
-        setBodoviModal(false);
-        showAlert("Bodovi su uspješno sačuvani!");
-      } else showAlert(res.data.message || "Greška.", "error");
-    } catch {
-      showAlert("Greška pri čuvanju bodova.", "error");
+      setOcjenePregledLoading(false);
     }
   };
 
@@ -441,6 +423,25 @@ const SluzbaDashboard = () => {
       showAlert(err.response?.data?.message || "Greška pri unosu.", "error");
     } finally {
       setPosebnaLoading(false);
+    }
+  };
+
+  const dodajBrucosa = async () => {
+    const f = noviStudentForm;
+    if (!f.ime || !f.prezime || !f.jmbg || !f.studentski_email || !f.broj_indeksa || !f.smjer) {
+      showAlert("Sva polja su obavezna.", "error");
+      return;
+    }
+    try {
+      const res = await api.post("/sluzba/studenti", f);
+      if (res.data.success) {
+        setNovStudentModal(false);
+        setNoviStudentForm({ ime: "", prezime: "", jmbg: "", studentski_email: "", broj_indeksa: "", smjer: "" });
+        setNoviStudentPodaci({ jedinstveni_id: res.data.jedinstveni_id, lozinka: res.data.lozinka, ime: f.ime, prezime: f.prezime });
+        setStudentiLoaded(false);
+      } else showAlert(res.data.message || "Greška.", "error");
+    } catch (err) {
+      showAlert(err.response?.data?.message || "Greška pri dodavanju studenta.", "error");
     }
   };
 
@@ -635,7 +636,19 @@ const SluzbaDashboard = () => {
               )}
 
               {tab === "studenti" && (
-                <Section title="Studenti vašeg fakulteta" count={`${filtriraniStudenti.length} / ${studenti.length} studenata`}>
+                <Section
+                  title="Studenti vašeg fakulteta"
+                  count={`${filtriraniStudenti.length} / ${studenti.length} studenata`}
+                  action={
+                    <button
+                      onClick={() => setNovStudentModal(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-white text-[12.5px] font-semibold rounded-xl transition-colors hover:opacity-90"
+                      style={{ background: "#A0784A" }}
+                    >
+                      <IcoPlus /> Dodaj brucoša
+                    </button>
+                  }
+                >
                   {!studentiLoaded ? <Spinner /> : (
                     <div className="p-4">
                       {/* Brza pretraga */}
@@ -747,7 +760,11 @@ const SluzbaDashboard = () => {
                             {filtriraniStudenti.length === 0 ? (
                               <tr><td colSpan="8" className="px-6 py-8 text-center text-[#8B7355]">Nema studenata koji odgovaraju pretrazi/filterima.</td></tr>
                             ) : filtriraniStudenti.map((s) => (
-                              <tr key={s.id} className="hover:bg-[#FAF7F3]">
+                              <tr
+                                key={s.id}
+                                className="hover:bg-[#FAF7F3] cursor-pointer"
+                                onClick={() => { setDetaljiStudent(s); setDetaljiModal(true); }}
+                              >
                                 <td className="px-6 py-3.5 font-semibold text-[#2C1A0E]">{s.ime} {s.prezime}</td>
                                 <td className="px-6 py-3.5 text-[#8B7355]">{s.jedinstveni_id}</td>
                                 <td className="px-6 py-3.5 text-[#8B7355]">{s.studentski_email}</td>
@@ -757,11 +774,11 @@ const SluzbaDashboard = () => {
                                 <td className="px-6 py-3.5 font-bold text-[#A0784A]">{s.ukupno_bodova ?? "—"}</td>
                                 <td className="px-6 py-3.5 text-right">
                                   <button
-                                    onClick={() => otvoriBodoviModal(s)}
+                                    onClick={(e) => { e.stopPropagation(); otvoriOcjenePregled(s); }}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-lg text-white hover:opacity-90 transition-colors"
                                     style={{ background: "#A0784A" }}
                                   >
-                                    <IcoEdit /> Bodovi
+                                    <IcoEdit /> Vidi ocjene
                                   </button>
                                 </td>
                               </tr>
@@ -799,19 +816,31 @@ const SluzbaDashboard = () => {
                           className="w-full border border-[#DDD0BE] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#A0784A]"
                         />
                       </div>
-                      <div>
-                        <label className="block text-[12px] font-bold text-[#5C4033] mb-1.5">Smjer (opciono)</label>
-                        <input
-                          type="text"
-                          list="smjer-opcije-predmet"
-                          value={predmetForm.smjer}
-                          onChange={(e) => setPredmetForm({ ...predmetForm, smjer: e.target.value })}
-                          placeholder="npr. Računarstvo (prazno = svi smjerovi)"
-                          className="w-full border border-[#DDD0BE] rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#A0784A]"
-                        />
-                        <datalist id="smjer-opcije-predmet">
-                          {smjerOpcije.map((s) => <option key={s} value={s} />)}
-                        </datalist>
+                      <div className="md:col-span-2 lg:col-span-3">
+                        <label className="block text-[12px] font-bold text-[#5C4033] mb-1.5">Smjerovi (možeš izabrati više — isti predmet, više smjerova)</label>
+                        <div className="flex flex-wrap gap-2">
+                          {smjerOpcije.map((s) => {
+                            const izabran = predmetForm.smjerovi.includes(s);
+                            return (
+                              <button
+                                type="button"
+                                key={s}
+                                onClick={() => setPredmetForm({
+                                  ...predmetForm,
+                                  smjerovi: izabran
+                                    ? predmetForm.smjerovi.filter((x) => x !== s)
+                                    : [...predmetForm.smjerovi, s],
+                                })}
+                                className="text-[12px] font-semibold px-3 py-1.5 rounded-full border transition-colors"
+                                style={izabran
+                                  ? { background: "#A0784A", color: "#fff", borderColor: "#A0784A" }
+                                  : { background: "#fff", color: "#8B7355", borderColor: "#DDD0BE" }}
+                              >
+                                {s}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-[12px] font-bold text-[#5C4033] mb-1.5">ECTS bodovi</label>
@@ -903,7 +932,7 @@ const SluzbaDashboard = () => {
                             ) : filtriraniPredmeti.map((p) => (
                               <tr key={p.id} className="hover:bg-[#FAF7F3]">
                                 <td className="px-6 py-3.5 font-semibold text-[#2C1A0E]">{p.naziv}</td>
-                                <td className="px-6 py-3.5 text-[#8B7355]">{p.smjer || "Svi smjerovi"}</td>
+                                <td className="px-6 py-3.5 text-[#8B7355]">{p.smjerovi || "Nema dodijeljen smjer"}</td>
                                 <td className="px-6 py-3.5 text-[#8B7355]">{p.sifra_predmeta || "—"}</td>
                                 <td className="px-6 py-3.5 text-[#8B7355]">{p.godina_studija}. godina</td>
                                 <td className="px-6 py-3.5 text-[#8B7355]">{p.semestar}.</td>
@@ -1161,50 +1190,34 @@ const SluzbaDashboard = () => {
       </div>
 
       <Modal
-        open={bodoviModal}
-        onClose={() => setBodoviModal(false)}
-        title={`Bodovi — ${bodoviStudent?.ime || ""} ${bodoviStudent?.prezime || ""}`}
-        subtitle="Unesite ili izmijenite bodove studenta po kategorijama"
+        open={ocjenePregledModal}
+        onClose={() => setOcjenePregledModal(false)}
+        title={`Ocjene — ${ocjenePregledStudent?.ime || ""} ${ocjenePregledStudent?.prezime || ""}`}
+        subtitle="Presjek svih unesenih ocjena (read-only)"
       >
-        {bodoviLoading ? <Spinner /> : (
-          <>
-            <FormInput
-              label="Akademski bodovi (40%)"
-              type="number"
-              placeholder="0"
-              value={bodoviForm.akademski_bodovi}
-              onChange={(e) => setBodoviForm({ ...bodoviForm, akademski_bodovi: e.target.value })}
-            />
-            <FormInput
-              label="Vannastavne aktivnosti (25%)"
-              type="number"
-              placeholder="0"
-              value={bodoviForm.vannastavne_aktivnosti_bodovi}
-              onChange={(e) => setBodoviForm({ ...bodoviForm, vannastavne_aktivnosti_bodovi: e.target.value })}
-            />
-            <FormInput
-              label="Društveni doprinos (20%)"
-              type="number"
-              placeholder="0"
-              value={bodoviForm.drustveni_doprinos_bodovi}
-              onChange={(e) => setBodoviForm({ ...bodoviForm, drustveni_doprinos_bodovi: e.target.value })}
-            />
-            <FormInput
-              label="Posebna postignuća (15%)"
-              type="number"
-              placeholder="0"
-              value={bodoviForm.posebna_postignuca_bodovi}
-              onChange={(e) => setBodoviForm({ ...bodoviForm, posebna_postignuca_bodovi: e.target.value })}
-            />
-            <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setBodoviModal(false)} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-[#F5EFE7] text-[#8B7355] border border-[#DDD0BE] hover:bg-[#EDE3D6] transition-colors">Otkaži</button>
-              <button onClick={sacuvajBodove} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-colors" style={{ background: "#A0784A" }}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                Sačuvaj
-              </button>
+        {ocjenePregledLoading ? <Spinner /> : (
+          ocjenePregledLista.length === 0 ? (
+            <p className="text-[13px] text-[#8B7355] text-center py-6">Nema unesenih ocjena za ovog studenta.</p>
+          ) : (
+            <div className="divide-y divide-[#EDE5DA]">
+              {ocjenePregledLista.map((o, i) => (
+                <div key={i} className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#2C1A0E]">{o.predmet}</p>
+                    <p className="text-[11px] text-[#A89682]">{formatirajDatum(o.datum)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-bold text-[#8B6340]">{o.bodovi}</span>
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#F5EFE7] text-[#6B4C2A]">{o.ocjena}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          </>
+          )
         )}
+        <div className="flex justify-end mt-6">
+          <button onClick={() => setOcjenePregledModal(false)} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-[#F5EFE7] text-[#8B7355] border border-[#DDD0BE] hover:bg-[#EDE3D6] transition-colors">Zatvori</button>
+        </div>
       </Modal>
 
       <Modal
@@ -1241,7 +1254,100 @@ const SluzbaDashboard = () => {
           </button>
         </div>
       </Modal>
+
+      <Modal
+        open={novStudentModal}
+        onClose={() => setNovStudentModal(false)}
+        title="Dodaj brucoša"
+        subtitle="Upis novog studenta — ID i lozinka se automatski generišu"
+      >
+        <FormInput label="Ime" required value={noviStudentForm.ime} onChange={(e) => setNoviStudentForm({ ...noviStudentForm, ime: e.target.value })} />
+        <FormInput label="Prezime" required value={noviStudentForm.prezime} onChange={(e) => setNoviStudentForm({ ...noviStudentForm, prezime: e.target.value })} />
+        <FormInput label="JMBG" required value={noviStudentForm.jmbg} onChange={(e) => setNoviStudentForm({ ...noviStudentForm, jmbg: e.target.value })} />
+        <FormInput label="Email" required type="email" value={noviStudentForm.studentski_email} onChange={(e) => setNoviStudentForm({ ...noviStudentForm, studentski_email: e.target.value })} />
+        <FormInput label="Broj indeksa" required placeholder="npr. 1/26" value={noviStudentForm.broj_indeksa} onChange={(e) => setNoviStudentForm({ ...noviStudentForm, broj_indeksa: e.target.value })} />
+        <div className="mb-4">
+          <label className="block text-xs font-semibold tracking-wider uppercase text-[#8B7355] mb-1.5">Smjer</label>
+          <select
+            value={noviStudentForm.smjer}
+            onChange={(e) => setNoviStudentForm({ ...noviStudentForm, smjer: e.target.value })}
+            className="w-full px-4 py-2.5 border border-[#DDD0BE] rounded-xl text-sm text-[#2C1A0E] bg-[#F5EFE7] focus:outline-none focus:border-[#6B4C2A] focus:bg-white transition-colors"
+          >
+            <option value="">— Izaberi smjer —</option>
+            {smjerOpcije.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <p className="text-[11.5px] text-[#8B7355] mb-3">
+          Jedinstveni ID i lozinka se generišu automatski nakon čuvanja (prikazaće se u sledećem koraku — zapiši ih, prikazuju se samo jednom). Godina studija: <strong>1. godina</strong> (fiksno).
+        </p>
+        <div className="flex gap-3 justify-end mt-2">
+          <button onClick={() => setNovStudentModal(false)} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-[#F5EFE7] text-[#8B7355] border border-[#DDD0BE] hover:bg-[#EDE3D6] transition-colors">Otkaži</button>
+          <button onClick={dodajBrucosa} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-colors" style={{ background: "#A0784A" }}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+            Upiši studenta
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Prikaz generisanih kredencijala — JEDNOM, odmah nakon kreiranja ── */}
+      <Modal
+        open={!!noviStudentPodaci}
+        onClose={() => setNoviStudentPodaci(null)}
+        title="Student je upisan!"
+        subtitle="Zapiši ove podatke — lozinka se neće moći ponovo prikazati"
+      >
+        {noviStudentPodaci && (
+          <div className="bg-[#F5EFE7] border border-[#DDD0BE] rounded-xl p-5 mb-4">
+            <p className="text-[13px] text-[#8B7355] mb-3">{noviStudentPodaci.ime} {noviStudentPodaci.prezime}</p>
+            <p className="text-[11px] text-[#8B7355]">Jedinstveni ID</p>
+            <p className="text-[18px] font-bold text-[#2C1A0E] mb-3">{noviStudentPodaci.jedinstveni_id}</p>
+            <p className="text-[11px] text-[#8B7355]">Lozinka</p>
+            <p className="text-[18px] font-bold text-[#2C1A0E]">{noviStudentPodaci.lozinka}</p>
+          </div>
+        )}
+        <button
+          onClick={() => setNoviStudentPodaci(null)}
+          className="w-full px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-colors"
+          style={{ background: "#A0784A" }}
+        >
+          Zapisao/la sam — zatvori
+        </button>
+      </Modal>
+
+      {/* ── Detalji studenta — osnovni podaci (BEZ lozinke, hesirana je) ──── */}
+      <Modal
+        open={detaljiModal}
+        onClose={() => setDetaljiModal(false)}
+        title={`${detaljiStudent?.ime || ""} ${detaljiStudent?.prezime || ""}`}
+        subtitle="Osnovni podaci studenta"
+      >
+        {detaljiStudent && (
+          <div className="space-y-3">
+            {[
+              ["Jedinstveni ID", detaljiStudent.jedinstveni_id],
+              ["Email", detaljiStudent.studentski_email],
+              ["Broj indeksa", detaljiStudent.broj_indeksa],
+              ["Smjer", detaljiStudent.smjer],
+              ["Godina studija", detaljiStudent.godina_studija],
+              ["JMBG", detaljiStudent.jmbg || "—"],
+              ["UniTrack bodovi", detaljiStudent.ukupno_bodova ?? "—"],
+            ].map(([labela, vrijednost]) => (
+              <div key={labela} className="flex items-center justify-between py-2 border-b border-[#EDE5DA]">
+                <span className="text-[12px] font-semibold text-[#8B7355]">{labela}</span>
+                <span className="text-[13px] text-[#2C1A0E]">{vrijednost}</span>
+              </div>
+            ))}
+            <div className="bg-[#FDF2F2] border border-[#F5D5D5] rounded-xl p-3 mt-3">
+              <p className="text-[11.5px] text-[#C62828]">
+                🔒 Lozinka se ne može prikazati — čuva se heširana (jednosmjerna enkripcija), niko je ne može "dekriptovati" nakon čuvanja.
+              </p>
+            </div>
+          </div>
+        )}
+        <button onClick={() => setDetaljiModal(false)} className="w-full mt-4 px-5 py-2.5 rounded-xl text-[13px] font-semibold bg-[#F5EFE7] text-[#8B7355] border border-[#DDD0BE] hover:bg-[#EDE3D6] transition-colors">Zatvori</button>
+      </Modal>
     </div>
+
   );
 };
 
