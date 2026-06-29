@@ -35,18 +35,9 @@ app.use(express.json());
 // "secure" kolačić ispravno radi kad je sajt iza HTTPS proxy-a
 app.set("trust proxy", 1);
 
-// ─── Sesije se čuvaju u bazi (ne u memoriji servera) — bez ovoga bi se svi
-// korisnici "izlogovali" svaki put kad Render besplatni plan uspava server ──
-const sessionStore = new MySQLStore({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: Number(process.env.DB_PORT) || 3306,
-  ssl: process.env.DB_SSL === "true"
-    ? { minVersion: "TLSv1.2", rejectUnauthorized: true }
-    : undefined,
-});
+const db = require("./db");
+
+const sessionStore = new MySQLStore({}, db);
 
 app.use(
   session({
