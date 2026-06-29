@@ -35,7 +35,7 @@ app.use(express.json());
 // "secure" kolačić ispravno radi kad je sajt iza HTTPS proxy-a
 app.set("trust proxy", 1);
 
-const db = require("./db");
+const db = require("./config/db");
 
 const sessionStore = new MySQLStore({}, db);
 
