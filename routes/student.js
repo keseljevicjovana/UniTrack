@@ -336,9 +336,9 @@ router.get("/rezultati", requireStudent, async (req, res) => {
       `
       SELECT
         r.id,
-        COALESCE(p.naziv, r.naziv) AS predmet,
-        p.semestar,
-        p.espb AS ects,
+        COALESCE(MAX(p.naziv), r.naziv) AS predmet,
+        MAX(p.semestar) AS semestar,
+        MAX(p.espb) AS ects,
         rs.bodovi,
         rs.ocjena,
         rs.polozen,
