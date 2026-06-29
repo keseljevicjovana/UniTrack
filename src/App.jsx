@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Lock, User, Info } from 'lucide-react';
 import { Routes, Route, Navigate } from "react-router-dom";
-import axios from "axios";
+import api from "./api/api";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import FirmaDashboard from "./pages/firma/FirmaDashboard";
 import StudentDashboard from "./pages/student/StudentDashboard";
@@ -38,11 +38,11 @@ function Login() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    axios.post("http://localhost:8080/api/auth/login", {
+    api.post("/auth/login", {
       identifier: formData.id,
       password: formData.password,
       rememberMe: formData.rememberMe
-    }, { withCredentials: true })
+    })
     .then((res) => {
       if (res.data.success) window.location.href = res.data.redirectTo;
     })
