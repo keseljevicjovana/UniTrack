@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ArrowLeft } from 'lucide-react';
-import axios from 'axios';
+import api from "../api/api";
 
 function ResetPassword() {
   const [formData, setFormData] = useState({
@@ -22,8 +22,8 @@ function ResetPassword() {
     setMessage({ type: '', text: '' });
     setLoading(true);
 
-    axios
-      .post('http://localhost:8080/api/reset/reset-password', formData)
+    api
+      .post('/reset/reset-password', formData)
       .then((res) => {
         setMessage({ type: 'success', text: res.data.message });
         setFormData({ email: '', novaLozinka: '', potvrdaLozinke: '' });

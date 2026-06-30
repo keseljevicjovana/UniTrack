@@ -9,6 +9,7 @@ import DigitalniCV from "./DigitalniCV";
 const IcoHome     = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>;
 const IcoTrophy   = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>;
 const IcoFile     = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>;
+const IcoTicket    = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/></svg>;
 const IcoSettings = () => <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>;
 const IcoBell     = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>;
 const IcoLogout   = () => <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>;
@@ -27,6 +28,7 @@ const NAV = [
   { id: "rezultati",   label: "Moji rezultati",         Icon: IcoAward },
   { id: "vannastavne", label: "Vannastavne aktivnosti",  Icon: IcoTrophy },
   { id: "konkursi",    label: "Konkursi",                Icon: IcoFile },
+  { id: "vauceri",     label: "Vaučeri",                 Icon: IcoTicket },
   { id: "cv",          label: "Digitalni CV",            Icon: IcoFile },
   { id: "rang",        label: "Rang lista",              Icon: IcoTrophy },
   { id: "settings",    label: "Podešavanja",             Icon: IcoSettings },
@@ -255,6 +257,11 @@ const StudentDashboard = () => {
   const [aktivnostiFilterOd, setAktivnostiFilterOd] = useState("");
   const [aktivnostiFilterDo, setAktivnostiFilterDo] = useState("");
 
+  // Vaučeri — za tab "Vaučeri"
+  const [vauceriOsvojeni, setVauceriOsvojeni] = useState([]);
+  const [vauceriTrenutne, setVauceriTrenutne] = useState([]);
+  const [vauceriLoaded, setVauceriLoaded] = useState(false);
+
   // Detaljni rezultati (eindex stil) — za tab "Moji rezultati"
   const [rezultatiDetaljno, setRezultatiDetaljno] = useState([]);
   const [rezultatiDetaljnoLoaded, setRezultatiDetaljnoLoaded] = useState(false);
@@ -330,10 +337,24 @@ const StudentDashboard = () => {
     }
   }, []);
 
+  const fetchVauceri = useCallback(async () => {
+    try {
+      const res = await api.get("/student/vauceri");
+      if (res.data.success) {
+        setVauceriOsvojeni(res.data.osvojeni);
+        setVauceriTrenutne(res.data.trenutneNagrade);
+        setVauceriLoaded(true);
+      }
+    } catch (err) {
+      console.error("Greška pri učitavanju vaučera:", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (tab === "vannastavne" && !aktivnostiLoaded) fetchAktivnosti();
     if (tab === "rezultati" && !rezultatiDetaljnoLoaded) fetchRezultatiDetaljno();
-  }, [tab, aktivnostiLoaded, rezultatiDetaljnoLoaded, fetchAktivnosti, fetchRezultatiDetaljno]);
+    if (tab === "vauceri" && !vauceriLoaded) fetchVauceri();
+  }, [tab, aktivnostiLoaded, rezultatiDetaljnoLoaded, vauceriLoaded, fetchAktivnosti, fetchRezultatiDetaljno, fetchVauceri]);
 
   // ─── Sortirani i paginirani rezultati za "Moji rezultati" tabelu ────────────
   const sortiraniRezultati = useMemo(() => {
@@ -1017,6 +1038,73 @@ const StudentDashboard = () => {
                   </div>
                 </div>
               </Section>
+            )}
+
+            {/* ── VAUČERI ── */}
+            {tab === "vauceri" && (
+              <>
+                <div className="mb-7">
+                  <h1 className="text-[22px] font-bold text-[#2C1A0E]">Vaučeri</h1>
+                  <p className="text-[14px] text-[#8B7355] mt-1">Osvojene nagrade i nagrade koje se trenutno mogu osvojiti.</p>
+                </div>
+
+                {!vauceriLoaded ? <Spinner /> : (
+                  <>
+                    <Section title="Osvojeni vaučeri" count={`${vauceriOsvojeni.length} osvojeno`}>
+                      {vauceriOsvojeni.length === 0 ? (
+                        <div className="p-8 text-center text-[#8B7355] text-sm">Još nisi osvojio/la nijedan vaučer.</div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
+                          {vauceriOsvojeni.map((v) => (
+                            <div key={v.id} className="border border-[#E8DDD0] rounded-2xl p-5 flex items-center gap-4" style={{ background: "#FDF9F3" }}>
+                              <div
+                                className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-white text-center"
+                                style={{ background: "#A0784A" }}
+                              >
+                                {v.procenat_popusta ? <span className="text-lg">{v.procenat_popusta}%</span> : <IcoTicket />}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[14px] font-bold text-[#2C1A0E]">{v.naziv_partnera}</p>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "#A0784A" }}>OSVOJENO</span>
+                                </div>
+                                <p className="text-[12px] text-[#8B7355] mt-0.5">{v.opis}</p>
+                                <p className="text-[11px] text-[#A89682] mt-1">
+                                  {MJESECI[v.mjesec - 1]} {v.godina}
+                                  {v.datum_isteka && ` · Ističe: ${formatirajDatum(v.datum_isteka)}`}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Section>
+
+                    <Section title="Nagrade za ovaj mjesec" count={`${vauceriTrenutne.length} nagrade`}>
+                      {vauceriTrenutne.length === 0 ? (
+                        <div className="p-8 text-center text-[#8B7355] text-sm">Struktura nagrada za ovaj mjesec još nije objavljena.</div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
+                          {vauceriTrenutne.map((v) => (
+                            <div key={v.id} className="border border-[#E8DDD0] rounded-2xl p-5 flex items-center gap-4">
+                              <div
+                                className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-white text-center text-[11px]"
+                                style={{ background: v.pozicija === 1 ? "#A0784A" : v.pozicija === 2 ? "#8B7355" : "#C4A882" }}
+                              >
+                                {v.pozicija ? `${v.pozicija}. mjesto` : <IcoTicket />}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[14px] font-bold text-[#2C1A0E]">{v.naziv_partnera}{v.procenat_popusta ? ` — ${v.procenat_popusta}%` : ""}</p>
+                                <p className="text-[12px] text-[#8B7355] mt-0.5">{v.opis}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Section>
+                  </>
+                )}
+              </>
             )}
 
             {/* ── DIGITALNI CV ── */}

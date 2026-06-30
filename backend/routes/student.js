@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
+const { generisiAiZakljucak } = require("../utils/aiProfil");
 
 function requireStudent(req, res, next) {
   if (!req.session.user || req.session.user.role !== "student") {
@@ -335,9 +336,9 @@ router.get("/rezultati", requireStudent, async (req, res) => {
       `
       SELECT
         r.id,
-        COALESCE(p.naziv, r.naziv) AS predmet,
-        p.semestar,
-        p.espb AS ects,
+        COALESCE(MAX(p.naziv), r.naziv) AS predmet,
+        MAX(p.semestar) AS semestar,
+        MAX(p.espb) AS ects,
         rs.bodovi,
         rs.ocjena,
         rs.polozen,
@@ -425,6 +426,7 @@ router.get("/digitalni-cv", requireStudent, async (req, res) => {
         s.studentski_email,
         s.broj_indeksa,
         s.smjer,
+        s.profesionalni_profil_ai,
         ss.id AS studentska_sluzba_id,
         ss.naziv_fakulteta
       FROM studenti s
@@ -531,12 +533,25 @@ router.get("/digitalni-cv", requireStudent, async (req, res) => {
 
     const analiza = generisiKompetencije(student, aktivnosti);
 
-    const profesionalniZakljucak = generisiProfesionalniZakljucak(
-      student,
-      analiza.kompetencije,
-      analiza.interesovanja,
-      analiza.preporuceneOblasti
-    );
+    // ─── AI profesionalni profil — generiše se SAMO JEDNOM po studentu,
+    // čuva se u bazi. Sluzba kasnije koristi ISTI sačuvani tekst za PDF,
+    // pa nema neslaganja i nema dodatnih troškova po pregledu. ───────────────
+    let profesionalniZakljucak = student.profesionalni_profil_ai;
+
+    if (!profesionalniZakljucak) {
+      profesionalniZakljucak = await generisiAiZakljucak(
+        student,
+        analiza.kompetencije,
+        analiza.interesovanja,
+        analiza.preporuceneOblasti,
+        aktivnosti
+      );
+
+      await db.query(
+        `UPDATE studenti SET profesionalni_profil_ai = ? WHERE id = ?`,
+        [profesionalniZakljucak, studentId]
+      );
+    }
 
     res.json({
       success: true,
@@ -876,6 +891,54 @@ router.post("/konkursi/:id/prijava", requireStudent, async (req, res) => {
       success: false,
       message: "Greška pri prijavi/odjavi sa konkursa.",
     });
+  }
+});
+
+// ─── VAUČERI — osvojeni (istorija) + struktura nagrada za trenutni mjesec ──
+router.get("/vauceri", requireStudent, async (req, res) => {
+  try {
+    const studentId = req.session.user.id;
+
+    const [[student]] = await db.query(
+      "SELECT studentska_sluzba_id FROM studenti WHERE id = ?",
+      [studentId]
+    );
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student nije pronađen." });
+    }
+
+    const sada = new Date();
+    const mjesec = sada.getMonth() + 1;
+    const godina = sada.getFullYear();
+
+    // Vaučeri koje je OVAJ student stvarno osvojio (bilo kad)
+    const [osvojeni] = await db.query(
+      `
+      SELECT v.id, v.naziv_partnera, v.opis, v.procenat_popusta, v.pozicija, v.mjesec, v.godina, v.datum_isteka, d.datum_dodjele
+      FROM vauceri_dobitnici d
+      JOIN vauceri v ON d.vaucer_id = v.id
+      WHERE d.student_id = ?
+      ORDER BY v.godina DESC, v.mjesec DESC
+      `,
+      [studentId]
+    );
+
+    // Struktura nagrada (1./2./3. mjesto) za trenutni mjesec, na fakultetu studenta
+    const [trenutneNagrade] = await db.query(
+      `
+      SELECT id, naziv_partnera, opis, procenat_popusta, pozicija, mjesec, godina, datum_isteka
+      FROM vauceri
+      WHERE studentska_sluzba_id = ? AND mjesec = ? AND godina = ?
+      ORDER BY pozicija ASC
+      `,
+      [student.studentska_sluzba_id, mjesec, godina]
+    );
+
+    res.json({ success: true, osvojeni, trenutneNagrade });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri učitavanju vaučera." });
   }
 });
 

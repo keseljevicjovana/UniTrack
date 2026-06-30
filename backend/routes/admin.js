@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
 const bcrypt = require("bcrypt");
+const { generisiNasumicnuLozinku, posaljiPocetnuLozinku } = require("../utils/emailService");
 
 function requireAdmin(req, res, next) {
   if (!req.session.user || req.session.user.role !== "admin") {
@@ -90,15 +91,16 @@ router.get("/dashboard", requireAdmin, async (req, res) => {
 
 router.post("/firme", requireAdmin, async (req, res) => {
   try {
-    const { naziv_firme, email, lozinka, pib, adresa, opis } = req.body;
+    const { naziv_firme, email, pib, adresa, opis } = req.body;
 
-    if (!naziv_firme || !email || !lozinka) {
+    if (!naziv_firme || !email) {
       return res.status(400).json({
         success: false,
-        message: "Naziv firme, email i lozinka su obavezni.",
+        message: "Naziv firme i email su obavezni.",
       });
     }
 
+    const lozinka = generisiNasumicnuLozinku();
     const hashedPassword = await bcrypt.hash(lozinka, 10);
 
     await db.query(
@@ -117,9 +119,14 @@ router.post("/firme", requireAdmin, async (req, res) => {
       ]
     );
 
+    const mejlRezultat = await posaljiPocetnuLozinku(email, naziv_firme, lozinka, "partnerska firma");
+
     res.json({
       success: true,
-      message: "Firma je uspješno dodata.",
+      message: mejlRezultat.uspjesno
+        ? "Firma je dodata. Lozinka je poslata na email."
+        : `Firma je dodata, ali mejl NIJE poslat (${mejlRezultat.razlog}). Privremena lozinka: ${lozinka}`,
+      ...(mejlRezultat.uspjesno ? {} : { privremena_lozinka: lozinka }),
     });
   } catch (error) {
     console.log(error);
@@ -133,15 +140,16 @@ router.post("/firme", requireAdmin, async (req, res) => {
 
 router.post("/studentske-sluzbe", requireAdmin, async (req, res) => {
   try {
-    const { naziv_fakulteta, email, lozinka } = req.body;
+    const { naziv_fakulteta, email } = req.body;
 
-    if (!naziv_fakulteta || !email || !lozinka) {
+    if (!naziv_fakulteta || !email) {
       return res.status(400).json({
         success: false,
-        message: "Naziv fakulteta, email i lozinka su obavezni.",
+        message: "Naziv fakulteta i email su obavezni.",
       });
     }
 
+    const lozinka = generisiNasumicnuLozinku();
     const hashedPassword = await bcrypt.hash(lozinka, 10);
 
     await db.query(
@@ -153,9 +161,14 @@ router.post("/studentske-sluzbe", requireAdmin, async (req, res) => {
       [naziv_fakulteta, email, hashedPassword]
     );
 
+    const mejlRezultat = await posaljiPocetnuLozinku(email, naziv_fakulteta, lozinka, "studentska služba");
+
     res.json({
       success: true,
-      message: "Studentska služba je uspješno dodata.",
+      message: mejlRezultat.uspjesno
+        ? "Studentska služba je dodata. Lozinka je poslata na email."
+        : `Služba je dodata, ali mejl NIJE poslat (${mejlRezultat.razlog}). Privremena lozinka: ${lozinka}`,
+      ...(mejlRezultat.uspjesno ? {} : { privremena_lozinka: lozinka }),
     });
   } catch (error) {
     console.log(error);
@@ -457,6 +470,98 @@ router.get("/rang-lista", requireAdmin, async (req, res) => {
       success: false,
       message: "Greška pri učitavanju rang liste.",
     });
+  }
+});
+
+// ─── VAUČERI — admin upravlja, po fakultetu/mjesecu ─────────────────────────
+router.get("/vauceri", requireAdmin, async (req, res) => {
+  try {
+    const [vauceri] = await db.query(`
+      SELECT v.id, v.naziv_partnera, v.opis, v.procenat_popusta, v.pozicija, v.mjesec, v.godina,
+             v.datum_isteka, ss.naziv_fakulteta, ss.id AS studentska_sluzba_id,
+             d.id AS dobitnik_id, s.ime AS dobitnik_ime, s.prezime AS dobitnik_prezime, s.jedinstveni_id AS dobitnik_jedinstveni_id
+      FROM vauceri v
+      JOIN studentske_sluzbe ss ON v.studentska_sluzba_id = ss.id
+      LEFT JOIN vauceri_dobitnici d ON d.vaucer_id = v.id
+      LEFT JOIN studenti s ON d.student_id = s.id
+      ORDER BY v.godina DESC, v.mjesec DESC, v.pozicija ASC
+    `);
+
+    res.json({ success: true, vauceri });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri učitavanju vaučera." });
+  }
+});
+
+router.post("/vauceri", requireAdmin, async (req, res) => {
+  try {
+    const { studentska_sluzba_id, naziv_partnera, opis, procenat_popusta, pozicija, mjesec, godina, datum_isteka } = req.body;
+
+    if (!studentska_sluzba_id || !naziv_partnera || !mjesec || !godina) {
+      return res.status(400).json({
+        success: false,
+        message: "Fakultet, naziv partnera, mjesec i godina su obavezni.",
+      });
+    }
+
+    await db.query(
+      `INSERT INTO vauceri (studentska_sluzba_id, naziv_partnera, opis, procenat_popusta, pozicija, mjesec, godina, datum_isteka)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [studentska_sluzba_id, naziv_partnera, opis || null, procenat_popusta || null, pozicija || null, mjesec, godina, datum_isteka || null]
+    );
+
+    res.json({ success: true, message: "Vaučer je uspješno dodat." });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri dodavanju vaučera." });
+  }
+});
+
+// ─── DODJELA POBJEDNIKA — povezuje konkretnog studenta sa osvojenim vaucerom ─
+router.post("/vauceri/:id/dobitnik", requireAdmin, async (req, res) => {
+  try {
+    const { jedinstveni_id } = req.body;
+
+    if (!jedinstveni_id) {
+      return res.status(400).json({ success: false, message: "Jedinstveni ID studenta je obavezan." });
+    }
+
+    const [[student]] = await db.query("SELECT id, ime, prezime FROM studenti WHERE jedinstveni_id = ?", [jedinstveni_id]);
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: `Student sa ID-om "${jedinstveni_id}" nije pronađen.` });
+    }
+
+    await db.query(
+      "INSERT INTO vauceri_dobitnici (vaucer_id, student_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE student_id = VALUES(student_id)",
+      [req.params.id, student.id]
+    );
+
+    res.json({ success: true, message: `${student.ime} ${student.prezime} je dodijeljen kao dobitnik.` });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri dodjeli pobjednika." });
+  }
+});
+
+router.delete("/vauceri/:id/dobitnik", requireAdmin, async (req, res) => {
+  try {
+    await db.query("DELETE FROM vauceri_dobitnici WHERE vaucer_id = ?", [req.params.id]);
+    res.json({ success: true, message: "Dobitnik je uklonjen." });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri uklanjanju dobitnika." });
+  }
+});
+
+router.delete("/vauceri/:id", requireAdmin, async (req, res) => {
+  try {
+    await db.query("DELETE FROM vauceri WHERE id = ?", [req.params.id]);
+    res.json({ success: true, message: "Vaučer je uspješno obrisan." });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ success: false, message: "Greška pri brisanju vaučera." });
   }
 });
 
